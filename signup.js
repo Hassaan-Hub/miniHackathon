@@ -3,7 +3,6 @@ import {
   createUserWithEmailAndPassword,
   doc,
   db,
-  app,
   setDoc,
 }
   from "./confige/firebase.js";
@@ -37,5 +36,3 @@ sSignupBtn.addEventListener("click", async () => {
   };
 })
 
-console.log(app.options);
-console.log(db);

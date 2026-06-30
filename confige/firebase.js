@@ -32,6 +32,5 @@ export {
     doc,
     setDoc,
     db,
-    getFirestore,
-    app
+    getFirestore
 }
