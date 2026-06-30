@@ -1,24 +1,41 @@
-import { getAuth, createUserWithEmailAndPassword } from "./confige/firebase.js";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  doc,
+  db,
+  app,
+  setDoc,
+}
+  from "./confige/firebase.js";
 
 const auth = getAuth();
 
+const sName = document.getElementById('sName');
 const sEmail = document.getElementById('sEmail');
 const sPassword = document.getElementById('sPassword');
+const sProfession = document.getElementById('sProfession');
 const sSignupBtn = document.getElementById('sSignupBtn');
 
-sSignupBtn.addEventListener("click", () => {
-  createUserWithEmailAndPassword(auth, sEmail.value, sPassword.value)
-    .then((userCredential) => {
-      // Signed up 
-      const user = userCredential.user;
-      window.location.href = "login.html"
-      console.log(user);
-    })
-    .catch((error) => {
-      const errorCode = error.code;
-      const errorMessage = error.message;
-      console.log(errorCode);
-      console.log(errorMessage);
-
+sSignupBtn.addEventListener("click", async () => {
+  const userCredential = await createUserWithEmailAndPassword(auth, sEmail.value, sPassword.value);
+  try {
+    const user = await userCredential.user;
+    await setDoc(doc(db, "users", user.uid), {
+      name: sName.value,
+      email: sEmail.value,
+      password: sPassword.value,
+      profession: sProfession.value,
+      uid: user.uid
     });
+    console.log("user created successfully + edit user data");
+    // window.location.href = "login.html"
+  } catch (error) {
+    const errorCode = error.code;
+    const errorMessage = error.message;
+    console.log(errorCode);
+    console.log(errorMessage);
+  };
 })
+
+console.log(app.options);
+console.log(db);

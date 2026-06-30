@@ -5,6 +5,12 @@ import {
     signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
+import { 
+    getFirestore,
+    doc, 
+    setDoc
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
 const firebaseConfig = {
     apiKey: "AIzaSyCHHPQXm_cZKPX5qkOVJwnA8wQ__Xv5NC0",
     authDomain: "saylani-hackathon-b798c.firebaseapp.com",
@@ -17,9 +23,15 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app)
+const db = getFirestore(app)
 
 export {
     getAuth,
     createUserWithEmailAndPassword,
-    signInWithEmailAndPassword
+    signInWithEmailAndPassword,
+    doc,
+    setDoc,
+    db,
+    getFirestore,
+    app
 }
