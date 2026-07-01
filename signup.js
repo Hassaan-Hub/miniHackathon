@@ -16,23 +16,27 @@ const sProfession = document.getElementById('sProfession');
 const sSignupBtn = document.getElementById('sSignupBtn');
 
 sSignupBtn.addEventListener("click", async () => {
-  const userCredential = await createUserWithEmailAndPassword(auth, sEmail.value, sPassword.value);
   try {
-    const user = await userCredential.user;
-    await setDoc(doc(db, "users", user.uid), {
-      name: sName.value,
-      email: sEmail.value,
-      password: sPassword.value,
-      profession: sProfession.value,
-      uid: user.uid
-    });
-    console.log("user created successfully + edit user data");
-    // window.location.href = "login.html"
-  } catch (error) {
-    const errorCode = error.code;
-    const errorMessage = error.message;
-    console.log(errorCode);
-    console.log(errorMessage);
-  };
-})
+  const userCredential =
+    await createUserWithEmailAndPassword(
+      auth,
+      sEmail.value,
+      sPassword.value
+    );
 
+  const user = userCredential.user;
+console.log("User UID:", user.uid);
+  await setDoc(doc(db, "users", user.uid), {
+    name: sName.value,
+    email: sEmail.value,
+    profession: sProfession.value,
+    uid: user.uid,
+  });
+
+  console.log("Success");
+} catch (error) {
+  console.log(error.code);
+  console.log(error.message);
+  console.log(error);
+}
+})
