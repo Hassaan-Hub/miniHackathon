@@ -2,12 +2,14 @@ import {
   signupFunction,
   getSingleUserDetails,
   getAllDetails,
-  toGetLoggedInUser
+  toGetLoggedInUser,
+  googleSignup,
+  githubsignup,
 }
   from "./confige/firebase.js";
 
 
-toGetLoggedInUser()
+// toGetLoggedInUser()
 
 
 const name = document.getElementById('name');
@@ -17,6 +19,8 @@ const profession = document.getElementById('profession');
 const signupBtn = document.getElementById('signupBtn');
 const getData = document.getElementById("getData");
 const getAllData = document.getElementById("getAllData");
+const signupWithGoogle = document.getElementById("signupWithGoogle");
+const signupWithGithub = document.getElementById("signupWithGithub");
 
 
 signupBtn.addEventListener("click", () => {
@@ -30,4 +34,14 @@ getData.addEventListener("click", () => {
 
 getAllData.addEventListener("click", () => {
   getAllDetails()
+})
+
+
+signupWithGoogle.addEventListener("click", () => {
+  googleSignup()
+})
+
+
+signupWithGithub.addEventListener("click", () => {
+  githubsignup()
 })

@@ -3,7 +3,10 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+  GithubAuthProvider,
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
 
 import {
@@ -31,8 +34,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app)
 const db = getFirestore(app)
-
-
+const googleProvider = new GoogleAuthProvider();
+const githubProvider = new GithubAuthProvider();
 
 
 function signupFunction(name, email, password, profession) {
@@ -85,19 +88,19 @@ function loginFunction(email, password) {
 function toGetLoggedInUser() {
   onAuthStateChanged(auth, (user) => {
     console.log("--> kya user mila??");
-    
+
     if (user) {
       const uid = user.uid;
       console.log(uid, "--> user uid");
       console.log(window.location, '--> window location');
-      
-      if(window.location.pathname !== "/newfile.html") {
+
+      if (window.location.pathname !== "/newfile.html") {
         window.location = "/newfile.html"
       }
 
     } else {
       console.log('--> user is not login ');
-      
+
       window.location = "/login.html"
     }
   });
@@ -129,10 +132,52 @@ async function getAllDetails() {
 }
 
 
+function googleSignup() {
+  signInWithPopup(auth, googleProvider)
+    .then((result) => {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential.accessToken;
+      const user = result.user;
+      console.log(user);
+    }).catch((error) => {
+      const errorCode = error.code;
+      const errorMessage = error.message;
+      const email = error.customData.email;
+      const credential = GoogleAuthProvider.credentialFromError(error);
+      console.log(errorCode);
+      console.log(errorMessage);
+      console.log(credential);
+    });
+}
+
+
+function githubsignup() {
+  signInWithPopup(auth, githubProvider)
+    .then((result) => {
+      const credential = GithubAuthProvider.credentialFromResult(result);
+      const token = credential.accessToken;
+      const user = result.user;
+      console.log(user);
+
+    }).catch((error) => {
+      const errorCode = error.code;
+      const errorMessage = error.message;
+      const email = error.customData.email;
+      const credential = GithubAuthProvider.credentialFromError(error);
+      console.log(errorCode);
+      console.log(errorMessage);
+      console.log(credential);
+      console.log(error);
+    });
+}
+
+
 export {
   signupFunction,
   loginFunction,
   getSingleUserDetails,
   getAllDetails,
   toGetLoggedInUser,
+  googleSignup,
+  githubsignup,
 }
