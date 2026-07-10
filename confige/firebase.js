@@ -93,7 +93,6 @@ function toGetLoggedInUser() {
     if (user) {
       const uid = user.uid;
       console.log(uid, "--> user uid");
-      console.log(window.location, '--> window location');
 
       if (window.location.pathname !== "/newfile.html") {
         window.location = "/newfile.html"
@@ -134,12 +133,17 @@ async function getSingleUserDetails(uniqueId) {
 
 async function getAllDetails() {
   const q = query(collection(db, "users"));
+  const userArr = [];
 
   const querySnapshot = await getDocs(q);
   querySnapshot.forEach((doc) => {
-    // doc.data() is never undefined for query doc snapshots
-    console.log(doc.id, " => ", doc.data());
+    // console.log(doc.id, " => ", doc.data());
+    userArr.push(doc.data())
   });
+  // userArr.forEach(()=>{
+    
+  // })
+  return ""
 }
 
 
