@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — MaintainIQ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/custom.css">
+  <style>
+    .chart-container { position:relative; }
+    .bar-chart { display:flex;align-items:flex-end;gap:0.5rem;height:200px;padding:1rem 0; }
+    .bar { flex:1;border-radius:0.375rem 0.375rem 0 0;transition:height 0.5s ease;min-width:40px;position:relative;cursor:pointer; }
+    .bar:hover { opacity:0.85; }
+    .bar-label { position:absolute;bottom:-1.5rem;left:50%;transform:translateX(-50%);font-size:0.6875rem;color:#64748b;white-space:nowrap; }
+    .bar-value { position:absolute;top:-1.25rem;left:50%;transform:translateX(-50%);font-size:0.75rem;font-weight:600; }
+    .donut-chart { width:160px;height:160px;border-radius:50%;position:relative;margin:0 auto; }
+    .donut-center { position:absolute;inset:25%;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column; }
+    .legend-item { display:flex;align-items:center;gap:0.5rem;font-size:0.8125rem;margin-bottom:0.375rem; }
+    .legend-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+  </style>
+</head>
+<body>
+  <button class="mobile-menu-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+  </button>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2>Analytics</h2>
+        <p style="color:#64748b;font-size:0.875rem;">Maintenance performance overview</p>
+      </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
+      <div class="stat-card">
+        <div class="stat-label">Total Issues (All Time)</div>
+        <div class="stat-value" id="totalIssues">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Resolution Time</div>
+        <div class="stat-value" id="avgResolution" style="color:#2563eb;">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Completion Rate</div>
+        <div class="stat-value" id="completionRate" style="color:#16a34a;">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Maintenance Cost</div>
+        <div class="stat-value" id="totalCost" style="color:#f59e0b;">-</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+      <!-- Issues by Month -->
+      <div class="card">
+        <div class="card-header"><h3>Issues by Month</h3></div>
+        <div class="card-body">
+          <div class="bar-chart" id="monthlyChart"></div>
+          <div style="height:1.5rem;"></div>
+        </div>
+      </div>
+
+      <!-- Status Distribution -->
+      <div class="card">
+        <div class="card-header"><h3>Status Distribution</h3></div>
+        <div class="card-body" id="statusDistribution">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+      <!-- Urgency Breakdown -->
+      <div class="card">
+        <div class="card-header"><h3>Urgency Breakdown</h3></div>
+        <div class="card-body" id="urgencyBreakdown">
+          <div class="spinner"></div>
+        </div>
+      </div>
+
+      <!-- Top Problematic Assets -->
+      <div class="card">
+        <div class="card-header"><h3>Most Problematic Assets</h3></div>
+        <div class="card-body" id="problemAssets">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Technician Performance -->
+    <div class="card" id="techPerfCard" style="display:none;">
+      <div class="card-header"><h3>Technician Performance (30 days)</h3></div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Technician</th>
+              <th>Assigned</th>
+              <th>In Progress</th>
+              <th>Resolved</th>
+              <th>Avg Days to Resolve</th>
+            </tr>
+          </thead>
+          <tbody id="techPerformance"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { db } from '/js/firebase-config.js';
+    import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { requireRole } from '/js/middleware.js';
+    import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
+    import { esc } from '/js/utils.js';
+
+    requireRole(['admin', 'manager'], async (user, userData) => {
+      document.getElementById('sidebar').innerHTML = getSidebar('analytics', userData.role);
+      setupNav('analytics');
+      populateUser(userData);
+      setupMobileMenu();
+
+      const orgId = userData.orgId;
+
+      // Load all data
+      const [issuesSnap, assetsSnap, usersSnap] = await Promise.all([
+        getDocs(query(collection(db, 'issues'), where('orgId', '==', orgId))),
+        getDocs(query(collection(db, 'assets'), where('orgId', '==', orgId))),
+        getDocs(query(collection(db, 'users'), where('orgId', '==', orgId)))
+      ]);
+
+      const issues = issuesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const assets = {};
+      assetsSnap.docs.forEach(d => { assets[d.id] = d.data(); });
+      const techUsers = {};
+      usersSnap.docs.forEach(d => {
+        const u = d.data();
+        if (u.role === 'technician') techUsers[d.id] = u;
+      });
+
+      // Key Metrics
+      document.getElementById('totalIssues').textContent = issues.length;
+
+      const resolvedIssues = issues.filter(i => i.resolvedAt && (i.status === 'resolved' || i.status === 'closed'));
+      if (resolvedIssues.length > 0) {
+        let totalDays = 0;
+        resolvedIssues.forEach(i => {
+          const created = i.createdAt?.toMillis?.() || 0;
+          const resolved = i.resolvedAt?.toMillis?.() || 0;
+          if (created && resolved) totalDays += (resolved - created) / (1000 * 60 * 60 * 24);
+        });
+        document.getElementById('avgResolution').textContent = (totalDays / resolvedIssues.length).toFixed(1) + 'd';
+      }
+
+      const completedCount = issues.filter(i => i.status === 'resolved' || i.status === 'closed').length;
+      document.getElementById('completionRate').textContent = issues.length > 0 ? Math.round(completedCount / issues.length * 100) + '%' : '0%';
+
+      const totalCost = issues.reduce((sum, i) => sum + (i.cost || 0), 0);
+      document.getElementById('totalCost').textContent = totalCost > 0 ? `$${totalCost.toFixed(2)}` : '$0';
+
+      // Monthly Chart
+      const monthlyData = {};
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        monthlyData[key] = { label: monthNames[d.getMonth()], count: 0 };
+      }
+
+      issues.forEach(i => {
+        const created = i.createdAt?.toDate?.();
+        if (!created) return;
+        const key = `${created.getFullYear()}-${created.getMonth()}`;
+        if (monthlyData[key]) monthlyData[key].count++;
+      });
+
+      const maxCount = Math.max(...Object.values(monthlyData).map(m => m.count), 1);
+      const chartEl = document.getElementById('monthlyChart');
+      chartEl.innerHTML = Object.values(monthlyData).map(m => {
+        const height = Math.max((m.count / maxCount) * 100, 4);
+        return `
+          <div class="bar" style="height:${height}%;background:#2563eb;">
+            <span class="bar-value">${m.count}</span>
+            <span class="bar-label">${m.label}</span>
+          </div>
+        `;
+      }).join('');
+
+      // Status Distribution
+      const statusCounts = {};
+      issues.forEach(i => { statusCounts[i.status] = (statusCounts[i.status] || 0) + 1; });
+      const statusColors = { reported: '#dc2626', triaged: '#f59e0b', assigned: '#2563eb', in_progress: '#0891b2', resolved: '#16a34a', closed: '#64748b', rejected: '#94a3b8' };
+
+      const statusEl = document.getElementById('statusDistribution');
+      if (issues.length === 0) {
+        statusEl.innerHTML = '<p style="color:#64748b;text-align:center;">No data yet</p>';
+      } else {
+        statusEl.innerHTML = Object.entries(statusCounts).map(([status, count]) => `
+          <div class="legend-item">
+            <span class="legend-dot" style="background:${statusColors[status] || '#64748b'};"></span>
+            <span style="flex:1;text-transform:capitalize;">${status.replace(/_/g, ' ')}</span>
+            <span style="font-weight:600;">${count}</span>
+            <span style="color:#94a3b8;font-size:0.75rem;">(${Math.round(count / issues.length * 100)}%)</span>
+          </div>
+        `).join('');
+      }
+
+      // Urgency Breakdown
+      const urgencyCounts = {};
+      issues.forEach(i => { urgencyCounts[i.urgency || 'low'] = (urgencyCounts[i.urgency || 'low'] || 0) + 1; });
+      const urgencyColors = { critical: '#dc2626', high: '#f59e0b', medium: '#2563eb', low: '#16a34a' };
+
+      const urgEl = document.getElementById('urgencyBreakdown');
+      if (issues.length === 0) {
+        urgEl.innerHTML = '<p style="color:#64748b;text-align:center;">No data yet</p>';
+      } else {
+        urgEl.innerHTML = ['critical', 'high', 'medium', 'low'].map(u => {
+          const count = urgencyCounts[u] || 0;
+          const pct = Math.round(count / issues.length * 100);
+          return `
+            <div style="margin-bottom:0.75rem;">
+              <div style="display:flex;justify-content:space-between;font-size:0.8125rem;margin-bottom:0.25rem;">
+                <span style="text-transform:capitalize;font-weight:500;">${u}</span>
+                <span style="color:#64748b;">${count} (${pct}%)</span>
+              </div>
+              <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${urgencyColors[u]};border-radius:4px;transition:width 0.5s;"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Most Problematic Assets
+      const assetIssueCounts = {};
+      issues.forEach(i => {
+        if (!assetIssueCounts[i.assetId]) assetIssueCounts[i.assetId] = 0;
+        assetIssueCounts[i.assetId]++;
+      });
+
+      const probEl = document.getElementById('problemAssets');
+      const sorted = Object.entries(assetIssueCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+      if (sorted.length === 0) {
+        probEl.innerHTML = '<p style="color:#64748b;text-align:center;">No data yet</p>';
+      } else {
+        probEl.innerHTML = sorted.map(([assetId, count]) => {
+          const a = assets[assetId] || {};
+          return `
+            <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid #f1f5f9;">
+              <div style="flex:1;">
+                <div style="font-weight:500;font-size:0.875rem;">${esc(a.name || 'Unknown')}</div>
+                <div style="font-size:0.75rem;color:#64748b;">${esc(a.location || '')}</div>
+              </div>
+              <span class="badge badge-danger">${count} issues</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Technician Performance
+      const techIds = Object.keys(techUsers);
+      if (techIds.length > 0) {
+        document.getElementById('techPerfCard').style.display = 'block';
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const tbody = document.getElementById('techPerformance');
+
+        tbody.innerHTML = techIds.map(tid => {
+          const tech = techUsers[tid];
+          const myIssues = issues.filter(i => i.assignedTo === tid);
+          const assigned = myIssues.filter(i => i.status === 'assigned').length;
+          const inProgress = myIssues.filter(i => i.status === 'in_progress').length;
+          const resolved = myIssues.filter(i => {
+            if (i.status !== 'resolved' && i.status !== 'closed') return false;
+            const d = i.resolvedAt?.toDate?.();
+            return d && d >= thirtyDaysAgo;
+          });
+
+          let avgDays = '-';
+          if (resolved.length > 0) {
+            let total = 0;
+            resolved.forEach(i => {
+              const c = i.createdAt?.toMillis?.() || 0;
+              const r = i.resolvedAt?.toMillis?.() || 0;
+              if (c && r) total += (r - c) / (1000 * 60 * 60 * 24);
+            });
+            avgDays = (total / resolved.length).toFixed(1) + 'd';
+          }
+
+          return `<tr>
+            <td style="font-weight:500;">${esc(tech.name || tech.email)}</td>
+            <td><span class="badge badge-info">${assigned}</span></td>
+            <td><span class="badge badge-primary">${inProgress}</span></td>
+            <td><span class="badge badge-success">${resolved.length}</span></td>
+            <td>${avgDays}</td>
+          </tr>`;
+        }).join('');
+      }
+    });
+  </script>
+</body>
+</html>

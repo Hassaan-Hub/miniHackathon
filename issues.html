@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Issues — MaintainIQ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body>
+  <button class="mobile-menu-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+  </button>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2>Issues / Requests</h2>
+        <p style="color:#64748b;font-size:0.875rem;">Triage, assign, and track all maintenance requests</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <select id="statusFilter">
+        <option value="">All Status</option>
+        <option value="reported">Reported</option>
+        <option value="triaged">Triaged</option>
+        <option value="assigned">Assigned</option>
+        <option value="in_progress">In Progress</option>
+        <option value="resolved">Resolved</option>
+        <option value="closed">Closed</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <select id="urgencyFilter">
+        <option value="">All Urgency</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+      <select id="categoryFilter">
+        <option value="">All Categories</option>
+      </select>
+      <input type="text" placeholder="Search issues..." id="searchInput" style="min-width:200px;">
+    </div>
+
+    <!-- Issues Table -->
+    <div class="card">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Asset</th>
+              <th>Description</th>
+              <th>Category</th>
+              <th>Urgency</th>
+              <th>Status</th>
+              <th>Assigned To</th>
+              <th>Reported</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="issues-list">
+            <tr><td colspan="9" style="text-align:center;padding:2rem;"><div class="spinner"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Triage Modal -->
+  <div class="modal-overlay" id="triageModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Triage Issue</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="triageIssueInfo" style="background:#f8fafc;border-radius:0.5rem;padding:1rem;margin-bottom:1.25rem;"></div>
+        <div class="input-group">
+          <label>Category</label>
+          <select id="triageCategory">
+            <option value="">Select...</option>
+            <option>HVAC</option>
+            <option>Electrical</option>
+            <option>Plumbing</option>
+            <option>IT Equipment</option>
+            <option>Furniture</option>
+            <option>Vehicle</option>
+            <option>Medical</option>
+            <option>Kitchen</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Urgency</label>
+          <select id="triageUrgency">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Assign To</label>
+          <select id="triageAssignTo">
+            <option value="">Unassigned</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Triage Notes</label>
+          <textarea id="triageNotes" rows="3" placeholder="Add notes about this issue..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger btn-sm" id="rejectBtn">Reject</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('triageModal').classList.remove('active')">Cancel</button>
+        <button class="btn btn-primary" id="saveTriageBtn">Save Triage</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { db } from '/js/firebase-config.js';
+    import { collection, query, where, onSnapshot, updateDoc, addDoc, doc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { requireRole } from '/js/middleware.js';
+    import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
+    import { showToast, statusBadge, esc, formatDateTime, openModal, closeModal, setupModals } from '/js/utils.js';
+
+    let currentOrgId = null;
+    let issuesData = {};
+    let assetsMap = {};
+    let technicians = {};
+
+    requireRole(['admin', 'manager'], async (user, userData) => {
+      document.getElementById('sidebar').innerHTML = getSidebar('issues', userData.role);
+      setupNav('issues');
+      populateUser(userData);
+      setupMobileMenu();
+      setupModals();
+
+      currentOrgId = userData.orgId;
+
+      // Load technicians
+      const techSnap = await getDocs(query(collection(db, 'users'), where('orgId', '==', currentOrgId), where('role', '==', 'technician')));
+      const assignSelect = document.getElementById('triageAssignTo');
+      techSnap.forEach(d => {
+        const t = d.data();
+        technicians[d.id] = t;
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = t.name || t.email;
+        assignSelect.appendChild(opt);
+      });
+
+      // Load assets for display
+      const assetsSnap = await getDocs(query(collection(db, 'assets'), where('orgId', '==', currentOrgId)));
+      assetsSnap.forEach(d => { assetsMap[d.id] = d.data(); });
+
+      // Populate category filter from assets
+      const categories = [...new Set(Object.values(assetsMap).map(a => a.category).filter(Boolean))];
+      const catFilter = document.getElementById('categoryFilter');
+      categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        catFilter.appendChild(opt);
+      });
+
+      // Real-time issues
+      const q = query(collection(db, 'issues'), where('orgId', '==', currentOrgId));
+      onSnapshot(q, (snap) => {
+        issuesData = {};
+        snap.forEach(d => { issuesData[d.id] = { id: d.id, ...d.data() }; });
+        renderIssues();
+      });
+
+      // Filter listeners
+      document.getElementById('statusFilter').addEventListener('change', renderIssues);
+      document.getElementById('urgencyFilter').addEventListener('change', renderIssues);
+      document.getElementById('categoryFilter').addEventListener('change', renderIssues);
+      document.getElementById('searchInput').addEventListener('input', renderIssues);
+
+      // Save triage
+      document.getElementById('saveTriageBtn').addEventListener('click', saveTriage);
+      document.getElementById('rejectBtn').addEventListener('click', rejectIssue);
+    });
+
+    let currentTriageId = null;
+
+    window.openTriage = function(issueId) {
+      const issue = issuesData[issueId];
+      if (!issue) return;
+      currentTriageId = issueId;
+
+      const asset = assetsMap[issue.assetId] || {};
+      document.getElementById('triageIssueInfo').innerHTML = `
+        <div style="font-size:0.875rem;">
+          <strong>Asset:</strong> ${esc(asset.name || 'Unknown')}<br>
+          <strong>Description:</strong> ${esc(issue.description || 'No description')}<br>
+          <strong>Reported by:</strong> ${esc(issue.reportedBy || 'Anonymous')}<br>
+          ${issue.photos?.length ? `<strong>Evidence:</strong> ${issue.photos.length} photo(s) uploaded` : ''}
+        </div>
+      `;
+
+      document.getElementById('triageCategory').value = issue.category || asset.category || '';
+      document.getElementById('triageUrgency').value = issue.urgency || 'medium';
+      document.getElementById('triageAssignTo').value = issue.assignedTo || '';
+      document.getElementById('triageNotes').value = issue.triageNotes || '';
+
+      openModal('triageModal');
+    };
+
+    function renderIssues() {
+      const tbody = document.getElementById('issues-list');
+      const status = document.getElementById('statusFilter').value;
+      const urgency = document.getElementById('urgencyFilter').value;
+      const category = document.getElementById('categoryFilter').value;
+      const search = document.getElementById('searchInput').value.toLowerCase();
+
+      let filtered = Object.values(issuesData).filter(i => {
+        if (status && i.status !== status) return false;
+        if (urgency && i.urgency !== urgency) return false;
+        if (category && i.category !== category) return false;
+        if (search && !i.description?.toLowerCase().includes(search)) return false;
+        return true;
+      });
+
+      filtered.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><h3>No issues found</h3><p>Issues reported via QR scans will appear here</p></div></td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(i => {
+        const asset = assetsMap[i.assetId] || {};
+        const tech = technicians[i.assignedTo] || {};
+        const shortId = i.id.substring(0, 6).toUpperCase();
+
+        return `<tr>
+          <td><code style="background:#f1f5f9;padding:0.125rem 0.375rem;border-radius:0.25rem;font-size:0.75rem;">${shortId}</code></td>
+          <td style="font-weight:500;">${esc(asset.name || 'Unknown')}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(i.description || '')}</td>
+          <td><span class="badge badge-secondary">${esc(i.category || asset.category || 'N/A')}</span></td>
+          <td>${statusBadge(i.urgency || 'low')}</td>
+          <td>${statusBadge(i.status)}</td>
+          <td>${tech.name ? esc(tech.name) : '<span style="color:#94a3b8;">Unassigned</span>'}</td>
+          <td style="color:#64748b;font-size:0.8125rem;">${formatDateTime(i.createdAt)}</td>
+          <td>
+            <button class="btn btn-secondary btn-xs triage-btn" data-id="${i.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Triage
+            </button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      document.querySelectorAll('.triage-btn').forEach(btn => {
+        btn.addEventListener('click', () => window.openTriage(btn.dataset.id));
+      });
+    }
+
+    async function saveTriage() {
+      if (!currentTriageId) return;
+      const btn = document.getElementById('saveTriageBtn');
+      btn.disabled = true;
+
+      try {
+        const assignTo = document.getElementById('triageAssignTo').value;
+        const updateData = {
+          category: document.getElementById('triageCategory').value,
+          urgency: document.getElementById('triageUrgency').value,
+          triageNotes: document.getElementById('triageNotes').value.trim(),
+          triagedBy: currentOrgId,
+          updatedAt: serverTimestamp(),
+          status: assignTo ? 'assigned' : 'triaged'
+        };
+
+        if (assignTo) updateData.assignedTo = assignTo;
+
+        await updateDoc(doc(db, 'issues', currentTriageId), updateData);
+
+        // Write service history
+        const issue = issuesData[currentTriageId];
+        await addDoc(collection(db, 'serviceHistory'), {
+          assetId: issue.assetId,
+          orgId: currentOrgId,
+          issueId: currentTriageId,
+          action: 'triaged',
+          performedBy: currentOrgId,
+          notes: `Category: ${updateData.category}, Urgency: ${updateData.urgency}${assignTo ? ', Assigned to technician' : ''}`,
+          timestamp: serverTimestamp()
+        });
+
+        // Update asset status if assigned
+        if (assignTo) {
+          await updateDoc(doc(db, 'assets', issue.assetId), {
+            status: 'under_maintenance',
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        showToast('Issue triaged successfully', 'success');
+        closeModal('triageModal');
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+
+      btn.disabled = false;
+    }
+
+    window.rejectIssue = async function() {
+      if (!currentTriageId) return;
+      if (!confirm('Reject this issue?')) return;
+
+      try {
+        await updateDoc(doc(db, 'issues', currentTriageId), {
+          status: 'rejected',
+          updatedAt: serverTimestamp()
+        });
+        showToast('Issue rejected', 'info');
+        closeModal('triageModal');
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

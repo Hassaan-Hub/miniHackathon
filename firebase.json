@@ -1,0 +1,51 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/asset/**",
+        "destination": "/public-asset.html"
+      },
+      {
+        "source": "/dashboard",
+        "destination": "/dashboard.html"
+      },
+      {
+        "source": "/assets",
+        "destination": "/assets.html"
+      },
+      {
+        "source": "/issues",
+        "destination": "/issues.html"
+      },
+      {
+        "source": "/technician",
+        "destination": "/technician.html"
+      },
+      {
+        "source": "/analytics",
+        "destination": "/analytics.html"
+      },
+      {
+        "source": "/asset-detail",
+        "destination": "/asset-detail.html"
+      },
+      {
+        "source": "/login",
+        "destination": "/login.html"
+      },
+      {
+        "source": "/signup",
+        "destination": "/signup.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

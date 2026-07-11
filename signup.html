@@ -1,34 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hackathon</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — MaintainIQ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/custom.css">
 </head>
-
 <body>
-    <a href="login.html">login Page</a>
-    <h1>signup</h1>
-    <input type="text" placeholder="Full Name" id="name">
-    <br><br>
-    <input type="email" placeholder="Email" id="email">
-    <br><br>
-    <input type="password" placeholder="Password" id="password">
-    <br><br>
-    <input type="text" placeholder="Profession" id="profession">
-    <br><br>
-    <button id="signupBtn">sign up</button>
-    <br><br>
-    <button id="getData">Get Data</button>
-    <br><br>
-    <button id="getAllData">Get All Data</button>
-    <br><br>
-    <button id="signupWithGoogle">Signup With Google</button>
-    <br><br>
-    <button id="signupWithGithub">Signup With Github</button>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+        <h1>MaintainIQ</h1>
+      </div>
 
+      <form id="signupForm">
+        <div class="input-group">
+          <label>Organization Name</label>
+          <input type="text" id="orgName" placeholder="e.g. ABC Corporation" required>
+        </div>
+        <div class="input-group">
+          <label>Full Name</label>
+          <input type="text" id="fullName" placeholder="John Doe" required>
+        </div>
+        <div class="input-group">
+          <label>Email</label>
+          <input type="email" id="email" placeholder="you@company.com" required>
+        </div>
+        <div class="input-group">
+          <label>Password</label>
+          <input type="password" id="password" placeholder="Minimum 6 characters" required minlength="6">
+        </div>
+        <div class="input-group">
+          <label>Phone (optional)</label>
+          <input type="tel" id="phone" placeholder="+1 234 567 890">
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="signupBtn" style="margin-top:0.5rem;">
+          Create Account
+        </button>
+
+        <p style="text-align:center;margin-top:1.25rem;font-size:0.875rem;color:#64748b;">
+          Already have an account? <a href="/login.html" style="color:#2563eb;font-weight:500;text-decoration:none;">Sign in</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db } from '/js/firebase-config.js';
+    import { createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { doc, setDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { showToast } from '/js/utils.js';
+
+    const form = document.getElementById('signupForm');
+    const btn = document.getElementById('signupBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+
+      try {
+        const orgName = document.getElementById('orgName').value.trim();
+        const name = document.getElementById('fullName').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const phone = document.getElementById('phone').value.trim();
+
+        // Create user
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+        // Create organization
+        const orgRef = await addDoc(collection(db, 'organizations'), {
+          name: orgName,
+          plan: 'free',
+          createdAt: serverTimestamp()
+        });
+
+        // Create user profile
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          orgId: orgRef.id,
+          name,
+          email,
+          phone,
+          role: 'admin',
+          emailVerified: false,
+          createdAt: serverTimestamp()
+        });
+
+        // Set custom claims via Firestore (admin role noted in users collection)
+        // Send verification email
+        await sendEmailVerification(cred.user);
+
+        showToast('Account created! Verification email sent.', 'success');
+        setTimeout(() => { window.location.href = '/dashboard.html'; }, 1500);
+      } catch (err) {
+        console.error(err);
+        let msg = 'Signup failed. Please try again.';
+        if (err.code === 'auth/email-already-in-use') msg = 'Email already in use.';
+        if (err.code === 'auth/weak-password') msg = 'Password is too weak.';
+        showToast(msg, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+  </script>
 </body>
-<script type="module" src="signup.js"></script>
-
 </html>

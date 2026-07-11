@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Tasks — MaintainIQ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body>
+  <button class="mobile-menu-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+  </button>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2>My Assigned Tasks</h2>
+        <p style="color:#64748b;font-size:0.875rem;">Issues assigned to you</p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;">
+      <button class="btn btn-sm tab-btn active" data-tab="active" style="background:#2563eb;color:white;">Active</button>
+      <button class="btn btn-sm tab-btn" data-tab="resolved" style="background:#f1f5f9;color:#475569;">Completed</button>
+    </div>
+
+    <div id="tasks-list">
+      <div class="spinner"></div>
+    </div>
+  </main>
+
+  <!-- Issue Detail Modal -->
+  <div class="modal-overlay" id="issueModal">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h3>Issue Details</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body" id="issueDetail">
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { db } from '/js/firebase-config.js';
+    import { collection, query, where, onSnapshot, updateDoc, doc, serverTimestamp, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { requireRole } from '/js/middleware.js';
+    import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
+    import { showToast, statusBadge, esc, formatDateTime, uploadFile, openModal, closeModal, setupModals, writeServiceHistory } from '/js/utils.js';
+
+    let currentUserId = null;
+    let currentOrgId = null;
+    let issuesData = {};
+    let assetsMap = {};
+    let currentTab = 'active';
+
+    requireRole(['technician'], async (user, userData) => {
+      currentUserId = user.uid;
+      currentOrgId = userData.orgId;
+
+      document.getElementById('sidebar').innerHTML = getSidebar('technician', userData.role);
+      setupNav('technician');
+      populateUser(userData);
+      setupMobileMenu();
+      setupModals();
+
+      // Load assets
+      const assetsSnap = await getDocs(query(collection(db, 'assets'), where('orgId', '==', currentOrgId)));
+      assetsSnap.forEach(d => { assetsMap[d.id] = d.data(); });
+
+      // Real-time assigned issues
+      const q = query(collection(db, 'issues'), where('assignedTo', '==', currentUserId));
+      onSnapshot(q, (snap) => {
+        issuesData = {};
+        snap.forEach(d => { issuesData[d.id] = { id: d.id, ...d.data() }; });
+        renderTasks();
+      });
+
+      // Tab switching
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentTab = btn.dataset.tab;
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.style.background = b.dataset.tab === currentTab ? '#2563eb' : '#f1f5f9';
+            b.style.color = b.dataset.tab === currentTab ? 'white' : '#475569';
+          });
+          renderTasks();
+        });
+      });
+    });
+
+    function renderTasks() {
+      const container = document.getElementById('tasks-list');
+      const activeStatuses = ['assigned', 'in_progress'];
+      const resolvedStatuses = ['resolved', 'closed'];
+
+      let filtered = Object.values(issuesData).filter(i => {
+        if (currentTab === 'active') return activeStatuses.includes(i.status);
+        return resolvedStatuses.includes(i.status);
+      });
+
+      filtered.sort((a, b) => {
+        const urgencyOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+        return (urgencyOrder[a.urgency] || 3) - (urgencyOrder[b.urgency] || 3);
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="card">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <h3>${currentTab === 'active' ? 'No active tasks' : 'No completed tasks yet'}</h3>
+              <p>${currentTab === 'active' ? 'New assignments will appear here' : 'Completed issues will show up here'}</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(i => {
+        const asset = assetsMap[i.assetId] || {};
+        return `
+          <div class="card" style="margin-bottom:1rem;cursor:pointer;" onclick="openIssueDetail('${i.id}')">
+            <div class="card-body">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+                <div style="flex:1;">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                    ${statusBadge(i.urgency || 'low')}
+                    ${statusBadge(i.status)}
+                  </div>
+                  <h4 style="font-weight:600;margin-bottom:0.25rem;">${esc(asset.name || 'Unknown Asset')}</h4>
+                  <p style="color:#64748b;font-size:0.875rem;margin-bottom:0.5rem;">${esc(i.description || 'No description')}</p>
+                  <div style="display:flex;gap:1rem;font-size:0.75rem;color:#94a3b8;">
+                    <span>Category: ${esc(i.category || asset.category || 'N/A')}</span>
+                    <span>Reported: ${formatDateTime(i.createdAt)}</span>
+                    ${i.photos?.length ? `<span>${i.photos.length} evidence photo(s)</span>` : ''}
+                  </div>
+                </div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.openIssueDetail = async function(issueId) {
+      const issue = issuesData[issueId];
+      if (!issue) return;
+
+      const asset = assetsMap[issue.assetId] || {};
+      const detail = document.getElementById('issueDetail');
+
+      const photosHTML = issue.photos?.length ? `
+        <div style="margin-top:1rem;">
+          <strong style="font-size:0.8125rem;">Evidence Photos:</strong>
+          <div class="preview-grid" style="margin-top:0.5rem;">
+            ${issue.photos.map(p => `<img src="${p}" style="cursor:pointer;" onclick="window.open('${p}','_blank')">`).join('')}
+          </div>
+        </div>
+      ` : '';
+
+      detail.innerHTML = `
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">${statusBadge(issue.urgency || 'low')} ${statusBadge(issue.status)}</div>
+
+        <h4 style="font-weight:600;font-size:1.125rem;margin-bottom:0.25rem;">${esc(asset.name || 'Unknown')}</h4>
+        <p style="color:#64748b;font-size:0.875rem;margin-bottom:1rem;">${esc(asset.location || '')}</p>
+
+        <div style="background:#f8fafc;border-radius:0.5rem;padding:1rem;margin-bottom:1rem;">
+          <p style="font-size:0.9375rem;">${esc(issue.description || 'No description')}</p>
+          <p style="font-size:0.75rem;color:#94a3b8;margin-top:0.5rem;">Reported by ${esc(issue.reportedBy || 'Anonymous')} on ${formatDateTime(issue.createdAt)}</p>
+        </div>
+
+        ${photosHTML}
+
+        ${issue.triageNotes ? `
+          <div style="background:#dbeafe;border-radius:0.5rem;padding:1rem;margin-top:1rem;">
+            <strong style="font-size:0.8125rem;">Triage Notes:</strong>
+            <p style="font-size:0.875rem;margin-top:0.25rem;">${esc(issue.triageNotes)}</p>
+          </div>
+        ` : ''}
+
+        <div style="margin-top:1.5rem;border-top:1px solid #e2e8f0;padding-top:1.5rem;">
+          <h4 style="font-weight:600;margin-bottom:1rem;">Update Status</h4>
+
+          ${issue.status === 'assigned' ? `
+            <button class="btn btn-primary btn-sm" onclick="updateStatus('${issueId}', 'in_progress')" style="margin-bottom:0.75rem;width:100%;">
+              Start Working
+            </button>
+          ` : ''}
+
+          ${issue.status === 'in_progress' ? `
+            <div class="input-group">
+              <label>Resolution Notes *</label>
+              <textarea id="resolutionNotes" rows="3" placeholder="Describe what you did to fix the issue..."></textarea>
+            </div>
+            <div class="input-group">
+              <label>Upload Evidence Photos *</label>
+              <input type="file" id="evidenceFiles" accept="image/*" multiple>
+              <div class="preview-grid" id="evidencePreview"></div>
+            </div>
+            <div class="input-group">
+              <label>Cost (optional)</label>
+              <input type="number" id="resolutionCost" placeholder="0.00" step="0.01">
+            </div>
+            <button class="btn btn-success btn-sm" onclick="resolveIssue('${issueId}', event)" style="width:100%;">
+              Mark as Resolved
+            </button>
+          ` : ''}
+
+          ${issue.status === 'resolved' ? `
+            <div style="background:#dcfce7;border-radius:0.5rem;padding:1rem;">
+              <p style="font-size:0.875rem;color:#166534;">Awaiting admin verification and closure.</p>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      // Evidence preview
+      const evidenceInput = document.getElementById('evidenceFiles');
+      if (evidenceInput) {
+        evidenceInput.addEventListener('change', (e) => {
+          const preview = document.getElementById('evidencePreview');
+          preview.innerHTML = '';
+          Array.from(e.target.files).forEach(file => {
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            preview.appendChild(img);
+          });
+        });
+      }
+
+      openModal('issueModal');
+    };
+
+    window.updateStatus = async function(issueId, newStatus) {
+      try {
+        await updateDoc(doc(db, 'issues', issueId), {
+          status: newStatus,
+          updatedAt: serverTimestamp()
+        });
+
+        const issue = issuesData[issueId];
+        await writeServiceHistory(issue.assetId, currentOrgId, 'status_change', currentUserId, `Status changed to ${newStatus}`, issueId);
+
+        showToast(`Status updated to ${newStatus.replace('_', ' ')}`, 'success');
+        closeModal('issueModal');
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+    };
+
+    window.resolveIssue = async function(issueId, evt) {
+      const notes = document.getElementById('resolutionNotes')?.value.trim();
+      const files = document.getElementById('evidenceFiles')?.files;
+      const cost = document.getElementById('resolutionCost')?.value;
+
+      if (!notes) {
+        showToast('Please add resolution notes', 'error');
+        return;
+      }
+
+      if (!files || files.length === 0) {
+        showToast('Please upload at least one evidence photo', 'error');
+        return;
+      }
+
+      const btn = evt.target;
+      btn.disabled = true;
+      btn.textContent = 'Uploading evidence...';
+
+      try {
+        // Upload evidence photos
+        const photoUrls = [];
+        for (let i = 0; i < files.length; i++) {
+          const url = await uploadFile(files[i], `evidence/${issueId}/${Date.now()}-${i}`);
+          photoUrls.push(url);
+        }
+
+        const issue = issuesData[issueId];
+        await updateDoc(doc(db, 'issues', issueId), {
+          status: 'resolved',
+          resolutionNotes: notes,
+          resolutionPhotos: photoUrls,
+          cost: cost ? parseFloat(cost) : null,
+          resolvedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+
+        // Update asset status back to operational
+        await updateDoc(doc(db, 'assets', issue.assetId), {
+          status: 'operational',
+          updatedAt: serverTimestamp()
+        });
+
+        // Write history
+        await writeServiceHistory(issue.assetId, currentOrgId, 'resolved', currentUserId, `Issue resolved: ${notes}`, issueId);
+
+        showToast('Issue resolved successfully!', 'success');
+        closeModal('issueModal');
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Mark as Resolved';
+    };
+
+    // Evidence file preview handler
+    document.addEventListener('change', (e) => {
+      if (e.target.id === 'evidenceFiles') {
+        const preview = document.getElementById('evidencePreview');
+        if (!preview) return;
+        preview.innerHTML = '';
+        Array.from(e.target.files).forEach(file => {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(file);
+          preview.appendChild(img);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

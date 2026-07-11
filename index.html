@@ -1,13 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaintainIQ — Maintenance Management Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/custom.css">
+  <style>
+    .hero {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #2563eb 100%);
+      display: flex;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: rgba(37,99,235,0.15);
+      top: -200px;
+      right: -200px;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: rgba(8,145,178,0.1);
+      bottom: -100px;
+      left: -100px;
+    }
+    .hero-content { position: relative; z-index: 1; }
+    .feature-card {
+      background: white;
+      border-radius: 1rem;
+      padding: 2rem;
+      border: 1px solid #e2e8f0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+    }
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .feature-icon svg { width: 24px; height: 24px; }
+    .workflow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .step-number {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+  </style>
 </head>
-<body>
-    <script>
-        window.location.href = "signup.html";
-    </script>
+<body style="background:#0f172a;">
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-content" style="max-width:1200px;margin:0 auto;padding:2rem;">
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:3rem;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:36px;height:36px;color:#60a5fa;">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+        <span style="color:white;font-size:1.25rem;font-weight:700;">MaintainIQ</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center;">
+        <div>
+          <h1 style="font-size:3rem;font-weight:800;color:white;line-height:1.1;margin-bottom:1.5rem;">
+            Smart Maintenance Management for Every Asset
+          </h1>
+          <p style="font-size:1.125rem;color:#94a3b8;margin-bottom:2rem;max-width:500px;">
+            Track assets, report issues via QR scan, manage technician workflows, and maintain a permanent service history — all in one platform.
+          </p>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <a href="/signup.html" class="btn btn-primary" style="padding:0.875rem 2rem;font-size:1rem;">
+              Get Started Free
+            </a>
+            <a href="/login.html" class="btn btn-secondary" style="padding:0.875rem 2rem;font-size:1rem;color:white;border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.05);">
+              Sign In
+            </a>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:center;">
+          <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:1rem;padding:2rem;width:100%;max-width:420px;">
+            <div style="text-align:center;margin-bottom:1.5rem;">
+              <div style="width:80px;height:80px;background:#2563eb;border-radius:1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="width:40px;height:40px;">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+              </div>
+              <h3 style="color:white;font-weight:600;margin-bottom:0.25rem;">QR-Enabled Assets</h3>
+              <p style="color:#94a3b8;font-size:0.875rem;">Scan to view, report, and track any asset</p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <div style="background:rgba(22,163,74,0.15);border-radius:0.5rem;padding:0.75rem;text-align:center;">
+                <div style="color:#4ade80;font-size:1.5rem;font-weight:700;">142</div>
+                <div style="color:#94a3b8;font-size:0.75rem;">Resolved</div>
+              </div>
+              <div style="background:rgba(37,99,235,0.15);border-radius:0.5rem;padding:0.75rem;text-align:center;">
+                <div style="color:#60a5fa;font-size:1.5rem;font-weight:700;">18</div>
+                <div style="color:#94a3b8;font-size:0.75rem;">Open Issues</div>
+              </div>
+              <div style="background:rgba(245,158,11,0.15);border-radius:0.5rem;padding:0.75rem;text-align:center;">
+                <div style="color:#fbbf24;font-size:1.5rem;font-weight:700;">89</div>
+                <div style="color:#94a3b8;font-size:0.75rem;">Assets</div>
+              </div>
+              <div style="background:rgba(8,145,178,0.15);border-radius:0.5rem;padding:0.75rem;text-align:center;">
+                <div style="color:#22d3ee;font-size:1.5rem;font-weight:700;">12</div>
+                <div style="color:#94a3b8;font-size:0.75rem;">Technicians</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section style="background:#f8fafc;padding:5rem 2rem;">
+    <div style="max-width:1200px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:3rem;">
+        <h2 style="font-size:2rem;font-weight:700;margin-bottom:0.5rem;">Everything You Need</h2>
+        <p style="color:#64748b;max-width:500px;margin:0 auto;">From QR scan to resolution — a complete maintenance workflow with full accountability.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1.5rem;">
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#dbeafe;"><svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h.01M7 12h.01M7 17h.01M12 7h.01M12 12h.01M12 17h.01M17 7h.01M17 12h.01M17 17h.01"/></svg></div>
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">QR-Enabled Assets</h3>
+          <p style="color:#64748b;font-size:0.9375rem;">Each asset gets a unique QR code. Anyone can scan to view details or report issues instantly.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#fef3c7;"><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">Smart Triage</h3>
+          <p style="color:#64748b;font-size:0.9375rem;">Issues are categorized and prioritized automatically. Admins triage and assign to the right technician.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#dcfce7;"><svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">Evidence-Backed Resolution</h3>
+          <p style="color:#64748b;font-size:0.9375rem;">Technicians upload photos and notes as proof of repair. Nothing is just "marked done."</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#f1f5f9;"><svg viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">Full Service History</h3>
+          <p style="color:#64748b;font-size:0.9375rem;">Every action is logged permanently. Complete audit trail for every asset's lifetime.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#ede9fe;"><svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">Preventive Recommendations</h3>
+          <p style="color:#64748b;font-size:0.9375rem;">Pattern detection flags assets needing preventive maintenance before they fail.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#cffafe;"><svg viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">Role-Based Access</h3>
+          <p style="color:#64748b;font-size:0.9375rem;">Admins, managers, technicians, and public reporters — each sees exactly what they need.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Workflow -->
+  <section style="background:white;padding:5rem 2rem;">
+    <div style="max-width:800px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:3rem;">
+        <h2 style="font-size:2rem;font-weight:700;margin-bottom:0.5rem;">How It Works</h2>
+        <p style="color:#64748b;">From issue report to verified resolution — a transparent, accountable process.</p>
+      </div>
+      <div class="workflow-step">
+        <div class="step-number">1</div>
+        <div><h4 style="font-weight:600;">Scan QR Code</h4><p style="color:#64748b;font-size:0.9375rem;">Anyone scans the asset's QR code to view its profile and report an issue.</p></div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-number">2</div>
+        <div><h4 style="font-weight:600;">Report Issue</h4><p style="color:#64748b;font-size:0.9375rem;">Reporter submits description, urgency level, and optional photo evidence.</p></div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-number">3</div>
+        <div><h4 style="font-weight:600;">Triage & Assign</h4><p style="color:#64748b;font-size:0.9375rem;">Admin reviews, categorizes, and assigns the issue to a qualified technician.</p></div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-number">4</div>
+        <div><h4 style="font-weight:600;">Resolve with Evidence</h4><p style="color:#64748b;font-size:0.9375rem;">Technician fixes the issue, uploads photos, and adds resolution notes.</p></div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-number">5</div>
+        <div><h4 style="font-weight:600;">Verify & Close</h4><p style="color:#64748b;font-size:0.9375rem;">Admin reviews evidence and closes the ticket. Full history is permanently recorded.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:4rem 2rem;text-align:center;">
+    <h2 style="font-size:2rem;font-weight:700;color:white;margin-bottom:1rem;">Ready to Streamline Maintenance?</h2>
+    <p style="color:#93c5fd;margin-bottom:2rem;">Start managing your assets professionally. Free to get started.</p>
+    <a href="/signup.html" class="btn" style="background:white;color:#2563eb;padding:0.875rem 2.5rem;font-size:1rem;">
+      Create Free Account
+    </a>
+  </section>
+
+  <!-- Footer -->
+  <footer style="background:#0f172a;padding:2rem;text-align:center;">
+    <p style="color:#64748b;font-size:0.875rem;">&copy; 2026 MaintainIQ. Built for smart facility management.</p>
+  </footer>
 </body>
 </html>
