@@ -32,6 +32,10 @@
         "destination": "/analytics.html"
       },
       {
+        "source": "/users",
+        "destination": "/users.html"
+      },
+      {
         "source": "/asset-detail",
         "destination": "/asset-detail.html"
       },
@@ -47,5 +51,8 @@
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

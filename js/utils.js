@@ -1,5 +1,7 @@
 import { db } from './firebase-config.js';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import { storage } from './firebase-config.js';
 
 // Toast notification
 export function showToast(message, type = 'info') {
@@ -61,11 +63,19 @@ export async function writeServiceHistory(assetId, orgId, action, performedBy, n
 
 // Upload file to Firebase Storage
 export async function uploadFile(file, path) {
-  const { ref, uploadBytes, getDownloadURL } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js");
-  const { storage } = await import('./firebase-config.js');
-  const storageRef = ref(storage, path);
-  const snapshot = await uploadBytes(storageRef, file);
-  return getDownloadURL(snapshot.ref);
+  try {
+    const storageRef = ref(storage, path);
+    const snapshot = await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(snapshot.ref);
+    return url;
+  } catch (err) {
+    if (err.code === 'storage/unauthorized') {
+      showToast('Storage access denied. Deploy storage rules: firebase deploy --only storage', 'error');
+    } else if (err.code === 'storage/cors-rejected') {
+      showToast('CORS error. Set CORS: gcloud storage buckets update gs://<bucket> --cors-file=cors.json', 'error');
+    }
+    throw err;
+  }
 }
 
 // Generate unique ID

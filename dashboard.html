@@ -134,7 +134,7 @@
 
   <script type="module">
     import { db } from '/js/firebase-config.js';
-    import { collection, query, where, onSnapshot, orderBy, limit, getDocs, doc, getDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { collection, query, where, onSnapshot, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { requireRole } from '/js/middleware.js';
     import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
     import { statusBadge, formatDate, esc } from '/js/utils.js';
@@ -181,26 +181,27 @@
       // Recent issues
       const recentQuery = query(
         collection(db, 'issues'),
-        where('orgId', '==', orgId),
-        orderBy('createdAt', 'desc'),
-        limit(5)
+        where('orgId', '==', orgId)
       );
 
       onSnapshot(recentQuery, (snap) => {
+        const sorted = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+          .slice(0, 5);
+
         const tbody = document.getElementById('recent-issues');
-        if (snap.empty) {
+        if (sorted.length === 0) {
           tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><p>No issues yet</p></td></tr>';
           return;
         }
 
-        // Fetch asset names
-        const assetIds = [...new Set(snap.docs.map(d => d.data().assetId))];
+        const assetIds = [...new Set(sorted.map(d => d.assetId).filter(Boolean))];
         Promise.all(assetIds.map(id => getDoc(doc(db, 'assets', id)))).then(assetSnaps => {
           const assetMap = {};
           assetSnaps.forEach(s => { if (s.exists()) assetMap[s.id] = s.data().name; });
 
-          tbody.innerHTML = snap.docs.map(d => {
-            const data = d.data();
+          tbody.innerHTML = sorted.map(data => {
             return `<tr>
               <td style="font-weight:500;">${esc(data.description?.substring(0, 50) || 'Issue')}</td>
               <td>${esc(assetMap[data.assetId] || data.assetId)}</td>

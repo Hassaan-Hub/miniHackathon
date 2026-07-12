@@ -157,17 +157,19 @@
 
   <script type="module">
     import { db } from '/js/firebase-config.js';
-    import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";/10.12.0/firebase-firestore.js";
     import { showToast, statusBadge, esc, formatDate, formatDateTime, uploadFile } from '/js/utils.js';
 
-    // Get asset ID from URL
+    // Get asset ID from URL — handles /asset/{id}, /asset/{id}/info, and ?id= formats
+    let assetId = null;
     const params = new URLSearchParams(window.location.search);
-    const assetId = params.get('id');
+    assetId = params.get('id');
 
-    // Also handle hash routing for /asset/{id} pattern
-    if (!assetId && window.location.hash) {
-      const hashId = window.location.hash.replace('#', '').replace('asset/', '');
-      if (hashId) window.location.search = `?id=${hashId}`;
+    if (!assetId) {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      if (pathParts.length >= 2 && pathParts[0] === 'asset') {
+        assetId = pathParts[1];
+      }
     }
 
     if (!assetId) {
@@ -322,7 +324,7 @@
     async function loadHistory(assetId) {
       const container = document.getElementById('historyList');
       try {
-        const q = query(collection(db, 'serviceHistory'), where('assetId', '==', assetId), orderBy('timestamp', 'desc'));
+        const q = query(collection(db, 'serviceHistory'), where('assetId', '==', assetId));
         const snap = await getDocs(q);
 
         if (snap.empty) {
@@ -330,8 +332,11 @@
           return;
         }
 
-        container.innerHTML = snap.docs.map(d => {
-          const log = d.data();
+        const sortedDocs = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+
+        container.innerHTML = sortedDocs.map(log => {
           const actionColors = {
             reported: '#dc2626',
             triaged: '#f59e0b',
