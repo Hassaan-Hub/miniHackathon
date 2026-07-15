@@ -61,3 +61,4 @@ form.addEventListener('submit', async (e) => {
     btn.textContent = 'Create Account';
   }
 });
+
