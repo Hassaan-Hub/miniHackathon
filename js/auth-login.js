@@ -2,10 +2,6 @@ import { auth } from '/js/firebase-config.js';
 import { signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { showToast } from '/js/utils.js';
 
-window.addEventListener('pageshow', (e) => {
-  if (e.persisted) sessionStorage.removeItem('_redirect_ts');
-});
-
 function safeRedirect(url) {
   const now = Date.now();
   const last = parseInt(sessionStorage.getItem('_redirect_ts') || '0', 10);
@@ -18,11 +14,22 @@ function safeRedirect(url) {
 }
 
 auth.authStateReady().then(() => {
+  const pendingError = sessionStorage.getItem('_auth_error');
+  if (pendingError) {
+    sessionStorage.removeItem('_auth_error');
+    showToast(pendingError, 'error');
+  }
+
   const unsub = onAuthStateChanged(auth, (user) => {
     unsub();
     if (user) {
-      console.log('[login] Already signed in as', user.email, '— redirecting to dashboard');
-      safeRedirect('/dashboard.html');
+      console.log('[login] Already signed in as', user.email);
+      const banner = document.getElementById('alreadySignedIn');
+      const emailEl = document.getElementById('loggedInEmail');
+      const form = document.getElementById('loginForm');
+      if (banner) banner.classList.remove('hidden');
+      if (emailEl) emailEl.textContent = user.email;
+      if (form) form.classList.add('hidden');
     }
   });
 });
@@ -43,11 +50,15 @@ form.addEventListener('submit', async (e) => {
     safeRedirect('/dashboard.html');
   } catch (err) {
     console.error('[login] Sign-in error:', err.code, err.message);
-    let msg = 'Login failed. Check your credentials.';
-    if (err.code === 'auth/user-not-found') msg = 'No account found with this email.';
-    if (err.code === 'auth/wrong-password') msg = 'Incorrect password.';
-    if (err.code === 'auth/invalid-email') msg = 'Invalid email address.';
-    showToast(msg, 'error');
+    const messages = {
+      'auth/user-not-found': 'No account found with this email.',
+      'auth/wrong-password': 'Incorrect password.',
+      'auth/invalid-email': 'Invalid email address.',
+      'auth/invalid-credential': 'Invalid email or password.',
+      'auth/too-many-requests': 'Too many attempts. Please try again later.',
+      'auth/user-disabled': 'This account has been disabled.'
+    };
+    showToast(messages[err.code] || 'Login failed. Check your credentials.', 'error');
     btn.disabled = false;
     btn.textContent = 'Sign In';
   }

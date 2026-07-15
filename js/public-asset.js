@@ -14,8 +14,10 @@ if (!assetId) {
 }
 
 if (!assetId) {
-  document.getElementById('loadingState').style.display = 'none';
-  document.getElementById('notFoundState').style.display = 'block';
+  const loading = document.getElementById('loadingState');
+  const notFound = document.getElementById('notFoundState');
+  if (loading) loading.style.display = 'none';
+  if (notFound) notFound.style.display = 'block';
 } else {
   loadAsset(assetId);
 }
@@ -24,102 +26,128 @@ async function loadAsset(id) {
   try {
     const assetDoc = await getDoc(doc(db, 'assets', id));
     if (!assetDoc.exists()) {
-      document.getElementById('loadingState').style.display = 'none';
-      document.getElementById('notFoundState').style.display = 'block';
+      const loading = document.getElementById('loadingState');
+      const notFound = document.getElementById('notFoundState');
+      if (loading) loading.style.display = 'none';
+      if (notFound) notFound.style.display = 'block';
       return;
     }
 
     const asset = assetDoc.data();
-    document.getElementById('assetName').textContent = asset.name;
-    document.getElementById('assetLocation').textContent = asset.location || '';
+
+    const setTxt = (elId, val) => { const el = document.getElementById(elId); if (el) el.textContent = val; };
+    setTxt('assetName', asset.name);
+    setTxt('assetLocation', asset.location || '');
     document.title = `${asset.name} — MaintainIQ`;
 
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('assetContent').style.display = 'block';
+    const loading = document.getElementById('loadingState');
+    const content = document.getElementById('assetContent');
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
 
-    document.getElementById('assetTitle').textContent = asset.name;
+    setTxt('assetTitle', asset.name);
     const statusEl = document.getElementById('assetStatus');
-    statusEl.textContent = (asset.status || 'operational').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    statusEl.className = `asset-status-indicator ${asset.status || 'operational'}`;
+    if (statusEl) {
+      statusEl.textContent = (asset.status || 'operational').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      statusEl.className = `asset-status-indicator ${asset.status || 'operational'}`;
+    }
 
-    document.getElementById('assetCategory').textContent = asset.category || 'N/A';
-    document.getElementById('assetLocationInfo').textContent = asset.location || 'N/A';
-    document.getElementById('assetInstall').textContent = asset.installDate || 'N/A';
-    document.getElementById('assetWarranty').textContent = asset.warrantyExpiry || 'N/A';
+    setTxt('assetCategory', asset.category || 'N/A');
+    setTxt('assetLocationInfo', asset.location || 'N/A');
+    setTxt('assetInstall', asset.installDate || 'N/A');
+    setTxt('assetWarranty', asset.warrantyExpiry || 'N/A');
 
     if (asset.photoUrl) {
-      document.getElementById('assetPhotoSection').style.display = 'block';
-      document.getElementById('assetPhoto').src = asset.photoUrl;
-      document.getElementById('assetPhoto').alt = asset.name;
+      const section = document.getElementById('assetPhotoSection');
+      const photo = document.getElementById('assetPhoto');
+      if (section) section.style.display = 'block';
+      if (photo) { photo.src = asset.photoUrl; photo.alt = asset.name; }
     }
 
     document.querySelectorAll('.tab-btns button').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btns button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('tab-report').style.display = btn.dataset.tab === 'report' ? 'block' : 'none';
-        document.getElementById('tab-history').style.display = btn.dataset.tab === 'history' ? 'block' : 'none';
-        document.getElementById('tab-issues').style.display = btn.dataset.tab === 'issues' ? 'block' : 'none';
+        const tabReport = document.getElementById('tab-report');
+        const tabHistory = document.getElementById('tab-history');
+        const tabIssues = document.getElementById('tab-issues');
+        if (tabReport) tabReport.style.display = btn.dataset.tab === 'report' ? 'block' : 'none';
+        if (tabHistory) tabHistory.style.display = btn.dataset.tab === 'history' ? 'block' : 'none';
+        if (tabIssues) tabIssues.style.display = btn.dataset.tab === 'issues' ? 'block' : 'none';
 
         if (btn.dataset.tab === 'history') loadHistory(id);
         if (btn.dataset.tab === 'issues') loadOpenIssues(id);
       });
     });
 
-    document.getElementById('reportForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      submitIssueReport(id, asset.orgId);
-    });
-
-    document.getElementById('reportPhotos').addEventListener('change', (e) => {
-      const preview = document.getElementById('reportPhotoPreview');
-      preview.innerHTML = '';
-      Array.from(e.target.files).forEach(file => {
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(file);
-        preview.appendChild(img);
+    const reportForm = document.getElementById('reportForm');
+    if (reportForm) {
+      reportForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        submitIssueReport(id, asset.orgId);
       });
-    });
+    }
+
+    const reportPhotos = document.getElementById('reportPhotos');
+    if (reportPhotos) {
+      reportPhotos.addEventListener('change', (e) => {
+        const preview = document.getElementById('reportPhotoPreview');
+        if (!preview) return;
+        preview.innerHTML = '';
+        Array.from(e.target.files).forEach(file => {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(file);
+          preview.appendChild(img);
+        });
+      });
+    }
 
     if (window.location.hash === '#report') {
-      document.getElementById('reportBtn').scrollIntoView({ behavior: 'smooth' });
+      const reportBtn = document.getElementById('reportBtn');
+      if (reportBtn) reportBtn.scrollIntoView({ behavior: 'smooth' });
     }
 
   } catch (err) {
-    console.error('Error loading asset:', err);
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('notFoundState').style.display = 'block';
+    console.error('[public-asset] Error loading asset:', err);
+    const loading = document.getElementById('loadingState');
+    const notFound = document.getElementById('notFoundState');
+    if (loading) loading.style.display = 'none';
+    if (notFound) notFound.style.display = 'block';
   }
 }
 
 async function submitIssueReport(assetId, orgId) {
   const btn = document.getElementById('submitReport');
+  if (!btn) return;
   btn.disabled = true;
   btn.textContent = 'Submitting...';
 
   try {
-    const description = document.getElementById('reportDesc').value.trim();
-    const urgency = document.getElementById('reportUrgency').value;
-    const name = document.getElementById('reportName').value.trim() || 'Anonymous';
-    const contact = document.getElementById('reportContact').value.trim();
-    const files = document.getElementById('reportPhotos').files;
+    const description = document.getElementById('reportDesc')?.value?.trim() || '';
+    const urgency = document.getElementById('reportUrgency')?.value || 'medium';
+    const name = document.getElementById('reportName')?.value?.trim() || 'Anonymous';
+    const contact = document.getElementById('reportContact')?.value?.trim() || '';
+    const files = document.getElementById('reportPhotos')?.files;
 
     const photoUrls = [];
-    if (files.length > 0) {
+    if (files && files.length > 0) {
       for (let i = 0; i < files.length; i++) {
         const url = await uploadFile(files[i], `reports/${assetId}/${Date.now()}-${i}`);
         photoUrls.push(url);
       }
     }
 
-    const assetDoc = await getDoc(doc(db, 'assets', assetId));
-    const assetData = assetDoc.data();
+    let assetCategory = '';
+    try {
+      const assetDoc = await getDoc(doc(db, 'assets', assetId));
+      if (assetDoc.exists()) assetCategory = assetDoc.data().category || '';
+    } catch (_) {}
 
     await addDoc(collection(db, 'issues'), {
       assetId,
       orgId,
       description,
-      category: assetData?.category || '',
+      category: assetCategory,
       urgency,
       status: 'reported',
       reportedBy: contact || name,
@@ -140,11 +168,13 @@ async function submitIssueReport(assetId, orgId) {
     });
 
     showToast('Issue reported successfully! Thank you for your report.', 'success');
-    document.getElementById('reportForm').reset();
-    document.getElementById('reportPhotoPreview').innerHTML = '';
+    const form = document.getElementById('reportForm');
+    if (form) form.reset();
+    const preview = document.getElementById('reportPhotoPreview');
+    if (preview) preview.innerHTML = '';
 
   } catch (err) {
-    console.error(err);
+    console.error('[public-report] Error:', err);
     showToast('Error submitting report. Please try again.', 'error');
   }
 
@@ -154,6 +184,8 @@ async function submitIssueReport(assetId, orgId) {
 
 async function loadHistory(assetId) {
   const container = document.getElementById('historyList');
+  if (!container) return;
+
   try {
     const q = query(collection(db, 'serviceHistory'), where('assetId', '==', assetId));
     const snap = await getDocs(q);
@@ -167,23 +199,23 @@ async function loadHistory(assetId) {
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
 
-    container.innerHTML = sortedDocs.map(log => {
-      const actionColors = {
-        reported: '#dc2626',
-        triaged: '#f59e0b',
-        assigned: '#2563eb',
-        status_change: '#0891b2',
-        resolved: '#16a34a',
-        closed: '#64748b'
-      };
+    const actionColors = {
+      reported: '#dc2626',
+      triaged: '#f59e0b',
+      assigned: '#2563eb',
+      status_change: '#0891b2',
+      resolved: '#16a34a',
+      closed: '#64748b'
+    };
 
+    container.innerHTML = sortedDocs.map(log => {
       return `
         <div class="timeline-item">
           <div class="time">${formatDateTime(log.timestamp)}</div>
           <div class="content">
             <span class="inline-flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full" style="background:${actionColors[log.action] || '#64748b'};"></span>
-              <strong class="capitalize">${log.action.replace(/_/g, ' ')}</strong>
+              <strong class="capitalize">${(log.action || '').replace(/_/g, ' ')}</strong>
             </span>
             ${log.notes ? `<p class="text-slate-500 text-xs mt-1">${esc(log.notes)}</p>` : ''}
             <p class="text-slate-400 text-xs mt-1">by ${esc(log.performedBy || 'System')}</p>
@@ -192,12 +224,15 @@ async function loadHistory(assetId) {
       `;
     }).join('');
   } catch (err) {
+    console.error('[public-asset] History error:', err);
     container.innerHTML = '<p class="text-slate-500 text-center p-4">Error loading history</p>';
   }
 }
 
 async function loadOpenIssues(assetId) {
   const container = document.getElementById('openIssuesList');
+  if (!container) return;
+
   try {
     const q = query(collection(db, 'issues'), where('assetId', '==', assetId));
     const snap = await getDocs(q);
@@ -228,6 +263,7 @@ async function loadOpenIssues(assetId) {
       `;
     }).join('');
   } catch (err) {
+    console.error('[public-asset] Issues error:', err);
     container.innerHTML = '<p class="text-slate-500 text-center p-4">Error loading issues</p>';
   }
 }

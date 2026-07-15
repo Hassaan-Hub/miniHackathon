@@ -2,7 +2,7 @@ import { db } from '/js/firebase-config.js';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { requireRole } from '/js/middleware.js';
 import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
-import { showToast, statusBadge, esc, openModal, closeModal, setupModals, uploadFile } from '/js/utils.js';
+import { showToast, statusBadge, esc, openModal, closeModal, setupModals } from '/js/utils.js';
 
 const QRCodeScript = document.createElement('script');
 QRCodeScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
@@ -10,6 +10,11 @@ document.head.appendChild(QRCodeScript);
 
 let currentOrgId = null;
 let assetsData = {};
+
+function safeOn(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+}
 
 requireRole(['admin', 'manager'], async (user, userData) => {
   document.getElementById('sidebar').innerHTML = getSidebar('assets', userData.role);
@@ -20,91 +25,73 @@ requireRole(['admin', 'manager'], async (user, userData) => {
 
   currentOrgId = userData.orgId;
 
+  if (!currentOrgId) {
+    document.getElementById('assets-list').innerHTML =
+      '<tr><td colspan="6"><div class="empty-state"><h3>Configuration Error</h3><p>Your account is not linked to an organization.</p></div></td></tr>';
+    return;
+  }
+
   const q = query(collection(db, 'assets'), where('orgId', '==', currentOrgId));
   onSnapshot(q, (snap) => {
     assetsData = {};
     snap.forEach(d => { assetsData[d.id] = { id: d.id, ...d.data() }; });
     renderAssets();
   }, (err) => {
-    console.error('Assets snapshot error:', err);
+    console.error('[assets] Snapshot error:', err);
     showToast('Error loading assets: ' + err.message, 'error');
   });
 
-  document.getElementById('addAssetBtn').addEventListener('click', () => {
-    document.getElementById('assetForm').reset();
-    document.getElementById('assetId').value = '';
-    document.getElementById('modalTitle').textContent = 'Add New Asset';
-    document.getElementById('photoPreview').innerHTML = '';
+  safeOn('addAssetBtn', 'click', () => {
+    const form = document.getElementById('assetForm');
+    if (form) form.reset();
+    const idField = document.getElementById('assetId');
+    if (idField) idField.value = '';
+    const title = document.getElementById('modalTitle');
+    if (title) title.textContent = 'Add New Asset';
     openModal('assetModal');
   });
 
-  const photoArea = document.getElementById('photoUploadArea');
-  const photoInput = document.getElementById('assetPhoto');
-  photoArea.addEventListener('click', () => photoInput.click());
-  photoInput.addEventListener('change', handlePhotoPreview);
-
-  document.getElementById('saveAssetBtn').addEventListener('click', saveAsset);
-  document.getElementById('searchInput').addEventListener('input', renderAssets);
-  document.getElementById('categoryFilter').addEventListener('change', renderAssets);
-  document.getElementById('statusFilter').addEventListener('change', renderAssets);
-
-  document.getElementById('cancelAssetBtn').addEventListener('click', () => closeModal('assetModal'));
-  document.getElementById('cancelQrBtn').addEventListener('click', () => closeModal('qrModal'));
+  safeOn('saveAssetBtn', 'click', saveAsset);
+  safeOn('searchInput', 'input', renderAssets);
+  safeOn('categoryFilter', 'change', renderAssets);
+  safeOn('statusFilter', 'change', renderAssets);
+  safeOn('cancelAssetBtn', 'click', () => closeModal('assetModal'));
 });
-
-function handlePhotoPreview(e) {
-  const preview = document.getElementById('photoPreview');
-  preview.innerHTML = '';
-  const file = e.target.files[0];
-  if (file) {
-    const img = document.createElement('img');
-    img.src = URL.createObjectURL(file);
-    preview.appendChild(img);
-  }
-}
 
 async function saveAsset() {
   const btn = document.getElementById('saveAssetBtn');
+  if (!btn) return;
   btn.disabled = true;
   btn.textContent = 'Saving...';
 
   try {
-    const id = document.getElementById('assetId').value;
-    const photoInput = document.getElementById('assetPhoto');
-    let photoUrl = '';
-
-    if (photoInput.files[0]) {
-      photoUrl = await uploadFile(photoInput.files[0], `assets/${currentOrgId}/${Date.now()}`);
-    }
+    const id = document.getElementById('assetId')?.value;
 
     const data = {
       orgId: currentOrgId,
-      name: document.getElementById('assetName').value.trim(),
-      category: document.getElementById('assetCategory').value,
-      location: document.getElementById('assetLocation').value.trim(),
-      status: document.getElementById('assetStatus').value,
-      installDate: document.getElementById('assetInstallDate').value || null,
-      warrantyExpiry: document.getElementById('assetWarranty').value || null,
+      name: document.getElementById('assetName')?.value?.trim() || '',
+      category: document.getElementById('assetCategory')?.value || '',
+      location: document.getElementById('assetLocation')?.value?.trim() || '',
+      status: document.getElementById('assetStatus')?.value || 'operational',
+      installDate: document.getElementById('assetInstallDate')?.value || null,
+      warrantyExpiry: document.getElementById('assetWarranty')?.value || null,
       updatedAt: serverTimestamp()
     };
-
-    if (photoUrl) data.photoUrl = photoUrl;
 
     if (id) {
       await updateDoc(doc(db, 'assets', id), data);
       showToast('Asset updated successfully', 'success');
     } else {
       data.createdAt = serverTimestamp();
-      const ref = await addDoc(collection(db, 'assets'), data);
-      const qrUrl = `${window.location.origin}/asset/${ref.id}`;
-      await updateDoc(doc(db, 'assets', ref.id), { qrCodeUrl: qrUrl });
+      await addDoc(collection(db, 'assets'), data);
       showToast('Asset created successfully', 'success');
     }
 
     closeModal('assetModal');
-    document.getElementById('assetForm').reset();
+    const form = document.getElementById('assetForm');
+    if (form) form.reset();
   } catch (err) {
-    console.error(err);
+    console.error('[assets] Save error:', err);
     showToast('Error saving asset: ' + err.message, 'error');
   }
 
@@ -114,9 +101,10 @@ async function saveAsset() {
 
 function renderAssets() {
   const tbody = document.getElementById('assets-list');
-  const search = document.getElementById('searchInput').value.toLowerCase();
-  const category = document.getElementById('categoryFilter').value;
-  const status = document.getElementById('statusFilter').value;
+  if (!tbody) return;
+  const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+  const category = document.getElementById('categoryFilter')?.value || '';
+  const status = document.getElementById('statusFilter')?.value || '';
 
   let filtered = Object.values(assetsData).filter(a => {
     if (search && !a.name?.toLowerCase().includes(search) && !a.location?.toLowerCase().includes(search)) return false;
@@ -136,9 +124,8 @@ function renderAssets() {
     <tr>
       <td>
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden">
-            ${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover">` :
-              '<svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" class="w-5 h-5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>'}
+          <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" class="w-5 h-5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
           </div>
           <div>
             <div class="font-medium">${esc(a.name)}</div>
@@ -179,24 +166,29 @@ function renderAssets() {
   });
 
   filtered.forEach(async a => {
-    const issuesSnap = await getDocs(query(collection(db, 'issues'), where('assetId', '==', a.id), where('status', 'in', ['reported', 'triaged', 'assigned', 'in_progress'])));
-    const el = document.getElementById(`issue-count-${a.id}`);
-    if (el) el.innerHTML = issuesSnap.size > 0 ? `<span class="badge badge-danger">${issuesSnap.size}</span>` : '<span class="text-slate-500">0</span>';
+    try {
+      const issuesSnap = await getDocs(query(collection(db, 'issues'), where('assetId', '==', a.id), where('status', 'in', ['reported', 'triaged', 'assigned', 'in_progress'])));
+      const el = document.getElementById(`issue-count-${a.id}`);
+      if (el) el.innerHTML = issuesSnap.size > 0 ? `<span class="badge badge-danger">${issuesSnap.size}</span>` : '<span class="text-slate-500">0</span>';
+    } catch (err) {
+      console.error('[assets] Failed to fetch issue count for asset', a.id, err);
+    }
   });
 }
 
 function editAsset(id) {
   const asset = assetsData[id];
   if (!asset) return;
-  document.getElementById('assetId').value = id;
-  document.getElementById('assetName').value = asset.name || '';
-  document.getElementById('assetCategory').value = asset.category || '';
-  document.getElementById('assetLocation').value = asset.location || '';
-  document.getElementById('assetStatus').value = asset.status || 'operational';
-  document.getElementById('assetInstallDate').value = asset.installDate || '';
-  document.getElementById('assetWarranty').value = asset.warrantyExpiry || '';
-  document.getElementById('modalTitle').textContent = 'Edit Asset';
-  document.getElementById('photoPreview').innerHTML = asset.photoUrl ? `<img src="${asset.photoUrl}">` : '';
+  const setVal = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
+  setVal('assetId', id);
+  setVal('assetName', asset.name);
+  setVal('assetCategory', asset.category);
+  setVal('assetLocation', asset.location);
+  setVal('assetStatus', asset.status || 'operational');
+  setVal('assetInstallDate', asset.installDate);
+  setVal('assetWarranty', asset.warrantyExpiry);
+  const title = document.getElementById('modalTitle');
+  if (title) title.textContent = 'Edit Asset';
   openModal('assetModal');
 }
 
@@ -206,7 +198,7 @@ async function deleteAsset(id) {
     await deleteDoc(doc(db, 'assets', id));
     showToast('Asset deleted', 'success');
   } catch (err) {
-    showToast('Error deleting asset', 'error');
+    showToast('Error deleting asset: ' + err.message, 'error');
   }
 }
 
@@ -216,6 +208,7 @@ function viewQR(id) {
 
   const qrUrl = `${window.location.origin}/asset/${id}`;
   const display = document.getElementById('qrDisplay');
+  if (!display) return;
   display.innerHTML = '';
 
   const generateQR = () => {
@@ -233,17 +226,20 @@ function viewQR(id) {
   };
   generateQR();
 
-  document.getElementById('qrAssetName').textContent = asset.name;
+  const nameEl = document.getElementById('qrAssetName');
+  if (nameEl) nameEl.textContent = asset.name;
   openModal('qrModal');
 
   const downloadBtn = document.getElementById('downloadQr');
-  downloadBtn.onclick = () => {
-    const canvas = display.querySelector('canvas');
-    if (canvas) {
-      const link = document.createElement('a');
-      link.download = `QR-${asset.name.replace(/\s+/g, '_')}.png`;
-      link.href = canvas.toDataURL();
-      link.click();
-    }
-  };
+  if (downloadBtn) {
+    downloadBtn.onclick = () => {
+      const canvas = display.querySelector('canvas');
+      if (canvas) {
+        const link = document.createElement('a');
+        link.download = `QR-${asset.name.replace(/\s+/g, '_')}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+      }
+    };
+  }
 }

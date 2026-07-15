@@ -22,23 +22,50 @@ export function requireAuth(callback) {
     const unsub = onAuthStateChanged(auth, async (user) => {
       unsub();
       if (!user) {
-        console.warn('[auth] No user signed in, redirecting to login');
+        console.warn('[auth] No user signed in — redirecting to login');
         safeRedirect('/login.html');
         return;
       }
+
       console.log('[auth] User signed in:', user.uid, user.email);
+
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
+
         if (!userDoc.exists()) {
-          console.warn('[auth] No Firestore doc at users/' + user.uid + ' — auth user exists but profile missing');
-          callback(user, { role: 'admin', orgId: null, name: user.email });
+          console.error('[auth] No profile at users/' + user.uid + ' — signing out');
+          await auth.signOut();
+          sessionStorage.setItem('_auth_error', 'Account profile not found. Please sign up again.');
+          safeRedirect('/login.html');
           return;
         }
-        console.log('[auth] User doc loaded:', userDoc.data());
-        callback(user, userDoc.data());
+
+        const userData = userDoc.data();
+
+        const roleDoc = await getDoc(doc(db, 'userRoles', user.uid));
+        if (roleDoc.exists()) {
+          userData.role = roleDoc.data().role;
+        }
+
+        if (!userData.role || !userData.orgId) {
+          console.error('[auth] User profile incomplete — missing role or orgId', userData);
+          await auth.signOut();
+          sessionStorage.setItem('_auth_error', 'Account profile is incomplete. Please contact support.');
+          safeRedirect('/login.html');
+          return;
+        }
+
+        console.log('[auth] Profile loaded — role:', userData.role, 'orgId:', userData.orgId);
+        callback(user, userData);
       } catch (err) {
         console.error('[auth] Firestore error for uid ' + user.uid + ':', err.code, err.message);
-        callback(user, { role: 'admin', orgId: null, name: user.email });
+
+        if (err.code === 'permission-denied') {
+          sessionStorage.setItem('_auth_error', 'Permission denied. Firestore rules may not be deployed. Run: firebase deploy --only firestore:rules');
+        } else {
+          sessionStorage.setItem('_auth_error', 'Failed to load user profile. Please try again.');
+        }
+        safeRedirect('/login.html');
       }
     });
   });
@@ -47,28 +74,19 @@ export function requireAuth(callback) {
 export function requireRole(roles, callback) {
   requireAuth((user, userData) => {
     const rawRole = userData.role;
-    const normalized = String(rawRole == null ? '' : rawRole).toLowerCase().trim();
+    const normalized = String(rawRole || '').toLowerCase().trim();
     const allowed = roles.map(r => r.toLowerCase());
-    const match = allowed.includes(normalized);
 
-    console.log('[auth] Role check:', {
-      rawRole,
-      type: typeof rawRole,
-      charCodes: typeof rawRole === 'string' ? Array.from(rawRole).map(c => c.charCodeAt(0)) : null,
-      normalized,
-      allowed,
-      match
-    });
-
-    if (!match) {
-      console.warn('[auth] Role mismatch — user role:', rawRole, '| required:', roles);
+    if (!allowed.includes(normalized)) {
+      console.warn('[auth] Role mismatch — user:', rawRole, '| required:', roles);
       if (normalized === 'technician') {
         safeRedirect('/technician.html');
       } else {
-        safeRedirect('/login.html');
+        safeRedirect('/dashboard.html');
       }
       return;
     }
+
     callback(user, userData);
   });
 }

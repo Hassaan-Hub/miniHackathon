@@ -20,14 +20,23 @@ requireRole(['technician'], async (user, userData) => {
   setupMobileMenu();
   setupModals();
 
-  const assetsSnap = await getDocs(query(collection(db, 'assets'), where('orgId', '==', currentOrgId)));
-  assetsSnap.forEach(d => { assetsMap[d.id] = d.data(); });
+  try {
+    if (currentOrgId) {
+      const assetsSnap = await getDocs(query(collection(db, 'assets'), where('orgId', '==', currentOrgId)));
+      assetsSnap.forEach(d => { assetsMap[d.id] = d.data(); });
+    }
+  } catch (err) {
+    console.error('[technician] Failed to load assets:', err);
+  }
 
   const q = query(collection(db, 'issues'), where('assignedTo', '==', currentUserId));
   onSnapshot(q, (snap) => {
     issuesData = {};
     snap.forEach(d => { issuesData[d.id] = { id: d.id, ...d.data() }; });
     renderTasks();
+  }, (err) => {
+    console.error('[technician] Snapshot error:', err);
+    showToast('Error loading tasks: ' + err.message, 'error');
   });
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -46,11 +55,13 @@ requireRole(['technician'], async (user, userData) => {
     });
   });
 
-  document.getElementById('cancelIssueBtn')?.addEventListener('click', () => closeModal('issueModal'));
+  const cancelBtn = document.getElementById('cancelIssueBtn');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => closeModal('issueModal'));
 });
 
 function renderTasks() {
   const container = document.getElementById('tasks-list');
+  if (!container) return;
   const activeStatuses = ['assigned', 'in_progress'];
   const resolvedStatuses = ['resolved', 'closed'];
 
@@ -114,6 +125,7 @@ function openIssueDetail(issueId) {
 
   const asset = assetsMap[issue.assetId] || {};
   const detail = document.getElementById('issueDetail');
+  if (!detail) return;
 
   const photosHTML = issue.photos?.length ? `
     <div class="mt-4">
@@ -198,6 +210,7 @@ function openIssueDetail(issueId) {
   if (evidenceInput) {
     evidenceInput.addEventListener('change', (e) => {
       const preview = document.getElementById('evidencePreview');
+      if (!preview) return;
       preview.innerHTML = '';
       Array.from(e.target.files).forEach(file => {
         const img = document.createElement('img');
@@ -223,12 +236,13 @@ async function updateStatus(issueId, newStatus) {
     showToast(`Status updated to ${newStatus.replace('_', ' ')}`, 'success');
     closeModal('issueModal');
   } catch (err) {
+    console.error('[technician] Status update error:', err);
     showToast('Error: ' + err.message, 'error');
   }
 }
 
 async function resolveIssue(issueId, evt) {
-  const notes = document.getElementById('resolutionNotes')?.value.trim();
+  const notes = document.getElementById('resolutionNotes')?.value?.trim();
   const files = document.getElementById('evidenceFiles')?.files;
   const cost = document.getElementById('resolutionCost')?.value;
 
@@ -273,6 +287,7 @@ async function resolveIssue(issueId, evt) {
     showToast('Issue resolved successfully!', 'success');
     closeModal('issueModal');
   } catch (err) {
+    console.error('[technician] Resolve error:', err);
     showToast('Error: ' + err.message, 'error');
   }
 

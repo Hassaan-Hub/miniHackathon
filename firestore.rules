@@ -2,71 +2,109 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Simple auth check
+    // ---- Helper Functions ----
+    // IMPORTANT: These use get()/exists() on /users/{auth.uid}.
+    // They MUST NOT be called from within the /users match block
+    // (causes circular read when userId == auth.uid).
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Check if user profile exists in Firestore
-    function hasUserDoc() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    function hasProfile() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    // Get user data — only safe to call AFTER hasUserDoc() check
-    function userOrgId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
+    function profileData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function userRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    function myOrgId() {
+      return profileData().orgId;
     }
 
-    // Composite checks
-    function isOrgMember(orgId) {
-      return hasUserDoc() && userOrgId() == orgId;
+    function myRole() {
+      return profileData().role;
     }
 
-    function isAdmin(orgId) {
-      return isOrgMember(orgId) && userRole() in ['admin', 'manager'];
+    function isInOrg(targetOrgId) {
+      return hasProfile() && myOrgId() == targetOrgId;
     }
 
-    function isTechnician(orgId) {
-      return isOrgMember(orgId) && userRole() == 'technician';
+    function isOrgAdmin(targetOrgId) {
+      return isInOrg(targetOrgId) &&
+        (myRole() == 'admin' || myRole() == 'manager');
+    }
+
+    function isOrgTechnician(targetOrgId) {
+      return isInOrg(targetOrgId) && myRole() == 'technician';
     }
 
     // ---- Collections ----
 
     match /organizations/{orgId} {
-      allow read: if isOrgMember(orgId);
+      allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if isAdmin(orgId);
+      allow update: if isOrgAdmin(orgId);
+      allow delete: if false;
     }
 
+    // USERS
+    // read: any signed-in user (client-side filters by orgId)
+    // create: signed-in user (signup creates own profile)
+    // update: self OR org admin (|| short-circuits so isOrgAdmin
+    //         is never evaluated when userId == auth.uid, avoiding circular read)
+    // delete: never
     match /users/{userId} {
-      allow read: if request.auth.uid == userId
-        || (hasUserDoc() && userOrgId() == resource.data.orgId);
+      allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if request.auth.uid == userId
-        || (hasUserDoc() && userRole() in ['admin', 'manager']);
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId
+        || isOrgAdmin(resource.data.orgId)
+      );
+      allow delete: if false;
     }
 
+    // USER ROLES
+    // Separate collection for role management.
+    // write: only org admins/managers of the same org as the target user.
+    match /userRoles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(userId)).data.orgId == myOrgId() &&
+        (myRole() == 'admin' || myRole() == 'manager');
+    }
+
+    // ASSETS: public read (QR-code scanning), admin write
     match /assets/{assetId} {
       allow read: if true;
-      allow create: if hasUserDoc() && userRole() in ['admin', 'manager'];
-      allow update: if hasUserDoc() && userRole() in ['admin', 'manager'];
-      allow delete: if hasUserDoc() && userRole() in ['admin', 'manager'];
+      allow create: if isOrgAdmin(request.resource.data.orgId);
+      allow update: if isOrgAdmin(resource.data.orgId);
+      allow delete: if isOrgAdmin(resource.data.orgId);
     }
 
+    // ISSUES: public read + create (public QR reporting)
+    // update: org admin or assigned technician
     match /issues/{issueId} {
+      allow read: if true;
       allow create: if true;
-      allow read: if isOrgMember(resource.data.orgId);
-      allow update: if isAdmin(resource.data.orgId)
-        || (isTechnician(resource.data.orgId) && resource.data.assignedTo == request.auth.uid);
+      allow update: if isInOrg(resource.data.orgId) && (
+        isOrgAdmin(resource.data.orgId)
+        || (
+          isOrgTechnician(resource.data.orgId)
+          && resource.data.assignedTo == request.auth.uid
+        )
+      );
+      allow delete: if false;
     }
 
+    // SERVICE HISTORY: public read, public create for issue reporting
     match /serviceHistory/{logId} {
-      allow read: if isOrgMember(resource.data.orgId);
-      allow create: if hasUserDoc();
+      allow read: if true;
+      allow create: if true;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }

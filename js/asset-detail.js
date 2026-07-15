@@ -2,7 +2,7 @@ import { db } from '/js/firebase-config.js';
 import { doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { requireAuth } from '/js/middleware.js';
 import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
-import { showToast, statusBadge, esc, formatDate, formatDateTime, openModal, setupModals } from '/js/utils.js';
+import { showToast, statusBadge, esc, formatDate, formatDateTime, openModal, closeModal, setupModals } from '/js/utils.js';
 
 const params = new URLSearchParams(window.location.search);
 const assetId = params.get('id');
@@ -18,7 +18,8 @@ requireAuth(async (user, userData) => {
   setupMobileMenu();
   setupModals();
 
-  document.getElementById('cancelQrBtn')?.addEventListener('click', () => closeModal('qrModal'));
+  const cancelBtn = document.getElementById('cancelQrBtn');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => closeModal('qrModal'));
 
   if (!assetId) return;
 
@@ -30,45 +31,51 @@ requireAuth(async (user, userData) => {
     }
 
     const asset = assetDoc.data();
-    document.getElementById('content').style.display = 'block';
-    document.getElementById('loading').style.display = 'none';
+    const contentEl = document.getElementById('content');
+    const loadingEl = document.getElementById('loading');
+    if (contentEl) contentEl.style.display = 'block';
+    if (loadingEl) loadingEl.style.display = 'none';
 
-    document.getElementById('assetName').textContent = asset.name;
-    document.getElementById('assetLocation').textContent = asset.location || '';
+    const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setTxt('assetName', asset.name);
+    setTxt('assetLocation', asset.location || '');
     document.title = `${asset.name} — MaintainIQ`;
 
     const statusEl = document.getElementById('assetStatus');
-    statusEl.textContent = (asset.status || 'operational').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    statusEl.className = `asset-status-indicator ${asset.status || 'operational'}`;
-    document.getElementById('assetCategory').textContent = asset.category || 'N/A';
-    document.getElementById('detailLocation').textContent = asset.location || 'N/A';
-    document.getElementById('detailInstall').textContent = asset.installDate || 'N/A';
-    document.getElementById('detailWarranty').textContent = asset.warrantyExpiry || 'N/A';
-
-    if (asset.photoUrl) {
-      document.getElementById('assetPhoto').innerHTML = `<img src="${asset.photoUrl}" class="w-full h-[200px] object-cover">`;
+    if (statusEl) {
+      statusEl.textContent = (asset.status || 'operational').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      statusEl.className = `asset-status-indicator ${asset.status || 'operational'}`;
     }
+    setTxt('assetCategory', asset.category || 'N/A');
+    setTxt('detailLocation', asset.location || 'N/A');
+    setTxt('detailInstall', asset.installDate || 'N/A');
+    setTxt('detailWarranty', asset.warrantyExpiry || 'N/A');
 
     const publicUrl = `/asset/${assetId}`;
-    document.getElementById('publicLink').href = publicUrl;
+    const publicLink = document.getElementById('publicLink');
+    if (publicLink) publicLink.href = publicUrl;
 
     const QRScript = document.createElement('script');
     QRScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
     document.head.appendChild(QRScript);
 
-    document.getElementById('viewQrBtn').addEventListener('click', () => {
-      const display = document.getElementById('qrDisplay');
-      display.innerHTML = '';
-      const generateQR = () => {
-        if (typeof QRCode === 'undefined') { setTimeout(generateQR, 100); return; }
-        new QRCode(display, { text: window.location.origin + publicUrl, width: 200, height: 200, colorDark: '#0f172a', colorLight: '#ffffff' });
-      };
-      generateQR();
-      openModal('qrModal');
-    });
+    const viewQrBtn = document.getElementById('viewQrBtn');
+    if (viewQrBtn) {
+      viewQrBtn.addEventListener('click', () => {
+        const display = document.getElementById('qrDisplay');
+        if (!display) return;
+        display.innerHTML = '';
+        const generateQR = () => {
+          if (typeof QRCode === 'undefined') { setTimeout(generateQR, 100); return; }
+          new QRCode(display, { text: window.location.origin + publicUrl, width: 200, height: 200, colorDark: '#0f172a', colorLight: '#ffffff' });
+        };
+        generateQR();
+        openModal('qrModal');
+      });
+    }
 
     const issuesSnap = await getDocs(query(collection(db, 'issues'), where('assetId', '==', assetId)));
-    document.getElementById('detailTotalIssues').textContent = issuesSnap.size;
+    setTxt('detailTotalIssues', issuesSnap.size);
 
     const issuesDocs = issuesSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
@@ -77,66 +84,75 @@ requireAuth(async (user, userData) => {
     const techIds = [...new Set(issuesDocs.map(d => d.assignedTo).filter(Boolean))];
     const techMap = {};
     await Promise.all(techIds.map(async id => {
-      const uDoc = await getDoc(doc(db, 'users', id));
-      if (uDoc.exists()) techMap[id] = uDoc.data();
+      try {
+        const uDoc = await getDoc(doc(db, 'users', id));
+        if (uDoc.exists()) techMap[id] = uDoc.data();
+      } catch (err) {
+        console.error('[asset-detail] Failed to load tech:', id, err);
+      }
     }));
 
     const issuesTbody = document.getElementById('issueHistory');
-    if (issuesDocs.length === 0) {
-      issuesTbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><p>No issues reported yet</p></div></td></tr>';
-    } else {
-      issuesTbody.innerHTML = issuesDocs.map(i => {
-        const tech = techMap[i.assignedTo] || {};
-        return `<tr>
-          <td><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">${i.id.substring(0, 6).toUpperCase()}</code></td>
-          <td class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">${esc(i.description || '')}</td>
-          <td>${statusBadge(i.status)}</td>
-          <td>${statusBadge(i.urgency || 'low')}</td>
-          <td>${tech.name ? esc(tech.name) : '<span class="text-slate-400">-</span>'}</td>
-          <td>${i.cost ? `$${i.cost.toFixed(2)}` : '-'}</td>
-          <td class="text-xs text-slate-500">${formatDate(i.createdAt)}</td>
-          <td class="text-xs text-slate-500">${formatDate(i.resolvedAt)}</td>
-        </tr>`;
-      }).join('');
+    if (issuesTbody) {
+      if (issuesDocs.length === 0) {
+        issuesTbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><p>No issues reported yet</p></div></td></tr>';
+      } else {
+        issuesTbody.innerHTML = issuesDocs.map(i => {
+          const tech = techMap[i.assignedTo] || {};
+          return `<tr>
+            <td><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">${i.id.substring(0, 6).toUpperCase()}</code></td>
+            <td class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">${esc(i.description || '')}</td>
+            <td>${statusBadge(i.status)}</td>
+            <td>${statusBadge(i.urgency || 'low')}</td>
+            <td>${tech.name ? esc(tech.name) : '<span class="text-slate-400">-</span>'}</td>
+            <td>${i.cost ? `$${i.cost.toFixed(2)}` : '-'}</td>
+            <td class="text-xs text-slate-500">${formatDate(i.createdAt)}</td>
+            <td class="text-xs text-slate-500">${formatDate(i.resolvedAt)}</td>
+          </tr>`;
+        }).join('');
+      }
     }
 
     const historySnap = await getDocs(query(collection(db, 'serviceHistory'), where('assetId', '==', assetId)));
     const timeline = document.getElementById('serviceTimeline');
-
-    if (historySnap.empty) {
-      timeline.innerHTML = '<p class="text-slate-500 text-center">No service history yet</p>';
-    } else {
-      const actionColors = { reported: '#dc2626', triaged: '#f59e0b', assigned: '#2563eb', status_change: '#0891b2', resolved: '#16a34a', closed: '#64748b' };
-      const sortedHistory = historySnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
-      timeline.innerHTML = sortedHistory.map(log => {
-        return `
-          <div class="timeline-item">
-            <div class="time">${formatDateTime(log.timestamp)}</div>
-            <div class="content">
-              <span class="inline-flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full" style="background:${actionColors[log.action] || '#64748b'};"></span>
-                <strong class="capitalize">${(log.action || '').replace(/_/g, ' ')}</strong>
-              </span>
-              ${log.notes ? `<p class="text-slate-500 text-xs mt-1">${esc(log.notes)}</p>` : ''}
-              <p class="text-slate-400 text-xs mt-1">by ${esc(log.performedBy || 'System')}</p>
+    if (timeline) {
+      if (historySnap.empty) {
+        timeline.innerHTML = '<p class="text-slate-500 text-center">No service history yet</p>';
+      } else {
+        const actionColors = { reported: '#dc2626', triaged: '#f59e0b', assigned: '#2563eb', status_change: '#0891b2', resolved: '#16a34a', closed: '#64748b' };
+        const sortedHistory = historySnap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+        timeline.innerHTML = sortedHistory.map(log => {
+          return `
+            <div class="timeline-item">
+              <div class="time">${formatDateTime(log.timestamp)}</div>
+              <div class="content">
+                <span class="inline-flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full" style="background:${actionColors[log.action] || '#64748b'};"></span>
+                  <strong class="capitalize">${(log.action || '').replace(/_/g, ' ')}</strong>
+                </span>
+                ${log.notes ? `<p class="text-slate-500 text-xs mt-1">${esc(log.notes)}</p>` : ''}
+                <p class="text-slate-400 text-xs mt-1">by ${esc(log.performedBy || 'System')}</p>
+              </div>
             </div>
-          </div>
-        `;
-      }).join('');
+          `;
+        }).join('');
+      }
     }
 
     loadRecommendations(assetId, asset, issuesDocs);
 
   } catch (err) {
-    console.error(err);
+    console.error('[asset-detail] Error:', err);
     showToast('Error loading asset details', 'error');
   }
 });
 
 function loadRecommendations(assetId, asset, issues) {
   const container = document.getElementById('recommendations');
+  if (!container) return;
+
   const alerts = [];
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 

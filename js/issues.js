@@ -10,6 +10,11 @@ let assetsMap = {};
 let technicians = {};
 let currentTriageId = null;
 
+function safeOn(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+}
+
 requireRole(['admin', 'manager'], async (user, userData) => {
   document.getElementById('sidebar').innerHTML = getSidebar('issues', userData.role);
   setupNav('issues');
@@ -19,43 +24,61 @@ requireRole(['admin', 'manager'], async (user, userData) => {
 
   currentOrgId = userData.orgId;
 
-  const techSnap = await getDocs(query(collection(db, 'users'), where('orgId', '==', currentOrgId), where('role', '==', 'technician')));
-  const assignSelect = document.getElementById('triageAssignTo');
-  techSnap.forEach(d => {
-    const t = d.data();
-    technicians[d.id] = t;
-    const opt = document.createElement('option');
-    opt.value = d.id;
-    opt.textContent = t.name || t.email;
-    assignSelect.appendChild(opt);
-  });
+  if (!currentOrgId) {
+    document.getElementById('issues-list').innerHTML =
+      '<tr><td colspan="9"><div class="empty-state"><h3>Configuration Error</h3><p>No organization linked to your account.</p></div></td></tr>';
+    return;
+  }
 
-  const assetsSnap = await getDocs(query(collection(db, 'assets'), where('orgId', '==', currentOrgId)));
-  assetsSnap.forEach(d => { assetsMap[d.id] = d.data(); });
+  try {
+    const techSnap = await getDocs(query(collection(db, 'users'), where('orgId', '==', currentOrgId), where('role', '==', 'technician')));
+    const assignSelect = document.getElementById('triageAssignTo');
+    techSnap.forEach(d => {
+      const t = d.data();
+      technicians[d.id] = t;
+      if (assignSelect) {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = t.name || t.email;
+        assignSelect.appendChild(opt);
+      }
+    });
 
-  const categories = [...new Set(Object.values(assetsMap).map(a => a.category).filter(Boolean))];
-  const catFilter = document.getElementById('categoryFilter');
-  categories.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c;
-    opt.textContent = c;
-    catFilter.appendChild(opt);
-  });
+    const assetsSnap = await getDocs(query(collection(db, 'assets'), where('orgId', '==', currentOrgId)));
+    assetsSnap.forEach(d => { assetsMap[d.id] = d.data(); });
+
+    const categories = [...new Set(Object.values(assetsMap).map(a => a.category).filter(Boolean))];
+    const catFilter = document.getElementById('categoryFilter');
+    categories.forEach(c => {
+      if (catFilter) {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        catFilter.appendChild(opt);
+      }
+    });
+  } catch (err) {
+    console.error('[issues] Failed to load technicians/assets:', err);
+    showToast('Error loading data: ' + err.message, 'error');
+  }
 
   const q = query(collection(db, 'issues'), where('orgId', '==', currentOrgId));
   onSnapshot(q, (snap) => {
     issuesData = {};
     snap.forEach(d => { issuesData[d.id] = { id: d.id, ...d.data() }; });
     renderIssues();
+  }, (err) => {
+    console.error('[issues] Snapshot error:', err);
+    showToast('Error loading issues: ' + err.message, 'error');
   });
 
-  document.getElementById('statusFilter').addEventListener('change', renderIssues);
-  document.getElementById('urgencyFilter').addEventListener('change', renderIssues);
-  document.getElementById('categoryFilter').addEventListener('change', renderIssues);
-  document.getElementById('searchInput').addEventListener('input', renderIssues);
-  document.getElementById('saveTriageBtn').addEventListener('click', saveTriage);
-  document.getElementById('rejectBtn').addEventListener('click', rejectIssue);
-  document.getElementById('cancelTriageBtn').addEventListener('click', () => closeModal('triageModal'));
+  safeOn('statusFilter', 'change', renderIssues);
+  safeOn('urgencyFilter', 'change', renderIssues);
+  safeOn('categoryFilter', 'change', renderIssues);
+  safeOn('searchInput', 'input', renderIssues);
+  safeOn('saveTriageBtn', 'click', saveTriage);
+  safeOn('rejectBtn', 'click', rejectIssue);
+  safeOn('cancelTriageBtn', 'click', () => closeModal('triageModal'));
 });
 
 function openTriage(issueId) {
@@ -64,29 +87,34 @@ function openTriage(issueId) {
   currentTriageId = issueId;
 
   const asset = assetsMap[issue.assetId] || {};
-  document.getElementById('triageIssueInfo').innerHTML = `
-    <div class="text-sm">
-      <strong>Asset:</strong> ${esc(asset.name || 'Unknown')}<br>
-      <strong>Description:</strong> ${esc(issue.description || 'No description')}<br>
-      <strong>Reported by:</strong> ${esc(issue.reportedBy || 'Anonymous')}<br>
-      ${issue.photos?.length ? `<strong>Evidence:</strong> ${issue.photos.length} photo(s) uploaded` : ''}
-    </div>
-  `;
+  const infoEl = document.getElementById('triageIssueInfo');
+  if (infoEl) {
+    infoEl.innerHTML = `
+      <div class="text-sm">
+        <strong>Asset:</strong> ${esc(asset.name || 'Unknown')}<br>
+        <strong>Description:</strong> ${esc(issue.description || 'No description')}<br>
+        <strong>Reported by:</strong> ${esc(issue.reportedBy || 'Anonymous')}<br>
+        ${issue.photos?.length ? `<strong>Evidence:</strong> ${issue.photos.length} photo(s) uploaded` : ''}
+      </div>
+    `;
+  }
 
-  document.getElementById('triageCategory').value = issue.category || asset.category || '';
-  document.getElementById('triageUrgency').value = issue.urgency || 'medium';
-  document.getElementById('triageAssignTo').value = issue.assignedTo || '';
-  document.getElementById('triageNotes').value = issue.triageNotes || '';
+  const setVal = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
+  setVal('triageCategory', issue.category || asset.category || '');
+  setVal('triageUrgency', issue.urgency || 'medium');
+  setVal('triageAssignTo', issue.assignedTo || '');
+  setVal('triageNotes', issue.triageNotes || '');
 
   openModal('triageModal');
 }
 
 function renderIssues() {
   const tbody = document.getElementById('issues-list');
-  const status = document.getElementById('statusFilter').value;
-  const urgency = document.getElementById('urgencyFilter').value;
-  const category = document.getElementById('categoryFilter').value;
-  const search = document.getElementById('searchInput').value.toLowerCase();
+  if (!tbody) return;
+  const status = document.getElementById('statusFilter')?.value || '';
+  const urgency = document.getElementById('urgencyFilter')?.value || '';
+  const category = document.getElementById('categoryFilter')?.value || '';
+  const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
 
   let filtered = Object.values(issuesData).filter(i => {
     if (status && i.status !== status) return false;
@@ -134,14 +162,14 @@ function renderIssues() {
 async function saveTriage() {
   if (!currentTriageId) return;
   const btn = document.getElementById('saveTriageBtn');
-  btn.disabled = true;
+  if (btn) { btn.disabled = true; }
 
   try {
-    const assignTo = document.getElementById('triageAssignTo').value;
+    const assignTo = document.getElementById('triageAssignTo')?.value || '';
     const updateData = {
-      category: document.getElementById('triageCategory').value,
-      urgency: document.getElementById('triageUrgency').value,
-      triageNotes: document.getElementById('triageNotes').value.trim(),
+      category: document.getElementById('triageCategory')?.value || '',
+      urgency: document.getElementById('triageUrgency')?.value || 'medium',
+      triageNotes: document.getElementById('triageNotes')?.value?.trim() || '',
       triagedBy: currentOrgId,
       updatedAt: serverTimestamp(),
       status: assignTo ? 'assigned' : 'triaged'
@@ -172,10 +200,11 @@ async function saveTriage() {
     showToast('Issue triaged successfully', 'success');
     closeModal('triageModal');
   } catch (err) {
+    console.error('[issues] Triage error:', err);
     showToast('Error: ' + err.message, 'error');
   }
 
-  btn.disabled = false;
+  if (btn) { btn.disabled = false; }
 }
 
 async function rejectIssue() {

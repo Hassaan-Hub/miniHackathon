@@ -1,5 +1,5 @@
 import { auth, db } from '/js/firebase-config.js';
-import { createUserWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { createUserWithEmailAndPassword, sendEmailVerification, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { doc, setDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { showToast } from '/js/utils.js';
 
@@ -13,6 +13,21 @@ function safeRedirect(url) {
   sessionStorage.setItem('_redirect_ts', String(now));
   window.location.replace(url);
 }
+
+auth.authStateReady().then(() => {
+  const unsub = onAuthStateChanged(auth, (user) => {
+    unsub();
+    if (user) {
+      console.log('[signup] Already signed in as', user.email);
+      const banner = document.getElementById('alreadySignedIn');
+      const emailEl = document.getElementById('loggedInEmail');
+      const form = document.getElementById('signupForm');
+      if (banner) banner.classList.remove('hidden');
+      if (emailEl) emailEl.textContent = user.email;
+      if (form) form.classList.add('hidden');
+    }
+  });
+});
 
 const form = document.getElementById('signupForm');
 const btn = document.getElementById('signupBtn');
@@ -47,18 +62,29 @@ form.addEventListener('submit', async (e) => {
       createdAt: serverTimestamp()
     });
 
+    await setDoc(doc(db, 'userRoles', cred.user.uid), {
+      role: 'admin',
+      createdAt: serverTimestamp()
+    });
+
     await sendEmailVerification(cred.user);
 
     showToast('Account created! Verification email sent.', 'success');
-    setTimeout(() => { safeRedirect('/dashboard.html'); }, 1500);
+
+    const banner = document.getElementById('alreadySignedIn');
+    const emailEl = document.getElementById('loggedInEmail');
+    if (banner) banner.classList.remove('hidden');
+    if (emailEl) emailEl.textContent = email;
+    form.classList.add('hidden');
   } catch (err) {
-    console.error(err);
-    let msg = 'Signup failed. Please try again.';
-    if (err.code === 'auth/email-already-in-use') msg = 'Email already in use.';
-    if (err.code === 'auth/weak-password') msg = 'Password is too weak.';
-    showToast(msg, 'error');
+    console.error('[signup] Error:', err.code, err.message);
+    const messages = {
+      'auth/email-already-in-use': 'Email already in use.',
+      'auth/weak-password': 'Password is too weak.',
+      'auth/invalid-email': 'Invalid email address.'
+    };
+    showToast(messages[err.code] || 'Signup failed. Please try again.', 'error');
     btn.disabled = false;
     btn.textContent = 'Create Account';
   }
 });
-

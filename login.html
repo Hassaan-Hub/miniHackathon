@@ -34,6 +34,18 @@
         <h1>MaintainIQ</h1>
       </div>
 
+      <div id="alreadySignedIn" class="hidden text-center py-6">
+        <div class="mb-4">
+          <svg class="mx-auto w-12 h-12 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <p class="text-slate-600 font-medium mb-1">You are already signed in</p>
+        <p id="loggedInEmail" class="text-sm text-slate-400 mb-4"></p>
+        <a href="/dashboard.html" class="btn btn-primary inline-block">Go to Dashboard</a>
+      </div>
+
       <form id="loginForm">
         <div class="input-group">
           <label>Email</label>

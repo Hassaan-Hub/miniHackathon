@@ -1,5 +1,5 @@
 import { db } from '/js/firebase-config.js';
-import { collection, query, where, onSnapshot, updateDoc, doc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { collection, query, where, onSnapshot, updateDoc, doc, serverTimestamp, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { requireRole } from '/js/middleware.js';
 import { setupNav, populateUser, setupMobileMenu, getSidebar } from '/js/middleware.js';
 import { showToast, statusBadge, esc, formatDate, openModal, closeModal, setupModals } from '/js/utils.js';
@@ -15,6 +15,11 @@ const roleColors = {
   reporter: 'badge-secondary'
 };
 
+function safeOn(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+}
+
 requireRole(['admin', 'manager'], async (user, userData) => {
   currentUserId = user.uid;
   document.getElementById('sidebar').innerHTML = getSidebar('users', userData.role);
@@ -25,32 +30,43 @@ requireRole(['admin', 'manager'], async (user, userData) => {
 
   currentOrgId = userData.orgId;
 
+  if (!currentOrgId) {
+    document.getElementById('users-list').innerHTML =
+      '<tr><td colspan="6"><div class="empty-state"><h3>Configuration Error</h3><p>No organization linked to your account.</p></div></td></tr>';
+    return;
+  }
+
   const q = query(collection(db, 'users'), where('orgId', '==', currentOrgId));
   onSnapshot(q, (snap) => {
     usersData = {};
     snap.forEach(d => { usersData[d.id] = { id: d.id, ...d.data() }; });
     renderUsers();
     updateStats();
+  }, (err) => {
+    console.error('[users] Snapshot error:', err);
+    showToast('Error loading users: ' + err.message, 'error');
   });
 
-  document.getElementById('searchInput').addEventListener('input', renderUsers);
-  document.getElementById('roleFilter').addEventListener('change', renderUsers);
-  document.getElementById('saveRoleBtn').addEventListener('click', saveRole);
-  document.getElementById('cancelRoleBtn').addEventListener('click', () => closeModal('roleModal'));
+  safeOn('searchInput', 'input', renderUsers);
+  safeOn('roleFilter', 'change', renderUsers);
+  safeOn('saveRoleBtn', 'click', saveRole);
+  safeOn('cancelRoleBtn', 'click', () => closeModal('roleModal'));
 });
 
 function updateStats() {
   const users = Object.values(usersData);
-  document.getElementById('totalUsers').textContent = users.length;
-  document.getElementById('adminCount').textContent = users.filter(u => u.role === 'admin').length;
-  document.getElementById('techCount').textContent = users.filter(u => u.role === 'technician').length;
-  document.getElementById('managerCount').textContent = users.filter(u => u.role === 'manager').length;
+  const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setTxt('totalUsers', users.length);
+  setTxt('adminCount', users.filter(u => u.role === 'admin').length);
+  setTxt('techCount', users.filter(u => u.role === 'technician').length);
+  setTxt('managerCount', users.filter(u => u.role === 'manager').length);
 }
 
 function renderUsers() {
   const tbody = document.getElementById('users-list');
-  const search = document.getElementById('searchInput').value.toLowerCase();
-  const role = document.getElementById('roleFilter').value;
+  if (!tbody) return;
+  const search = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+  const role = document.getElementById('roleFilter')?.value || '';
 
   let filtered = Object.values(usersData).filter(u => {
     if (search && !u.name?.toLowerCase().includes(search) && !u.email?.toLowerCase().includes(search)) return false;
@@ -74,7 +90,7 @@ function renderUsers() {
       <td>
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center font-semibold text-xs text-slate-600 overflow-hidden">
-            ${u.photoUrl ? `<img src="${u.photoUrl}" class="w-full h-full object-cover">` : initials}
+            ${u.photoUrl ? `<img src="${esc(u.photoUrl)}" class="w-full h-full object-cover">` : initials}
           </div>
           <div>
             <div class="font-medium">${esc(u.name || 'Unknown')}${isSelf ? ' <span class="text-xs text-green-600">(You)</span>' : ''}</div>
@@ -102,22 +118,28 @@ function renderUsers() {
 function openRoleModal(userId) {
   const user = usersData[userId];
   if (!user) return;
-  document.getElementById('editUserId').value = userId;
-  document.getElementById('editUserName').textContent = user.name || user.email;
-  document.getElementById('editUserRole').value = user.role || 'technician';
+  const idField = document.getElementById('editUserId');
+  if (idField) idField.value = userId;
+  const nameEl = document.getElementById('editUserName');
+  if (nameEl) nameEl.textContent = user.name || user.email;
+  const roleField = document.getElementById('editUserRole');
+  if (roleField) roleField.value = user.role || 'technician';
   openModal('roleModal');
 }
 
 async function saveRole() {
-  const userId = document.getElementById('editUserId').value;
-  const newRole = document.getElementById('editUserRole').value;
+  const userId = document.getElementById('editUserId')?.value;
+  const newRole = document.getElementById('editUserRole')?.value;
   if (!userId || !newRole) return;
 
   const btn = document.getElementById('saveRoleBtn');
-  btn.disabled = true;
-  btn.textContent = 'Saving...';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
 
   try {
+    await setDoc(doc(db, 'userRoles', userId), {
+      role: newRole,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
     await updateDoc(doc(db, 'users', userId), {
       role: newRole,
       updatedAt: serverTimestamp()
@@ -125,10 +147,9 @@ async function saveRole() {
     showToast('Role updated successfully', 'success');
     closeModal('roleModal');
   } catch (err) {
-    console.error(err);
+    console.error('[users] Role update error:', err);
     showToast('Error updating role: ' + err.message, 'error');
   }
 
-  btn.disabled = false;
-  btn.textContent = 'Save Role';
+  if (btn) { btn.disabled = false; btn.textContent = 'Save Role'; }
 }
