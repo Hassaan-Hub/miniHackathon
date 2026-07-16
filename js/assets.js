@@ -123,14 +123,7 @@ function renderAssets() {
   tbody.innerHTML = filtered.map(a => `
     <tr>
       <td>
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" class="w-5 h-5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-          </div>
-          <div>
-            <div class="font-medium">${esc(a.name)}</div>
-          </div>
-        </div>
+        <div class="font-medium">${esc(a.name)}</div>
       </td>
       <td><span class="badge badge-secondary">${esc(a.category || 'N/A')}</span></td>
       <td class="text-slate-500 text-xs">${esc(a.location || 'N/A')}</td>

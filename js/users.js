@@ -36,7 +36,7 @@ requireRole(['admin', 'manager'], async (user, userData) => {
     return;
   }
 
-  const q = query(collection(db, 'users'), where('orgId', '==', currentOrgId));
+  const q = query(collection(db, 'users'));
   onSnapshot(q, (snap) => {
     usersData = {};
     snap.forEach(d => { usersData[d.id] = { id: d.id, ...d.data() }; });

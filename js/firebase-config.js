@@ -4,13 +4,13 @@ import { getAuth, browserLocalPersistence, setPersistence } from "https://www.gs
 import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCTYO_2j7fmlTSofaHTmkpta1ckM7B4Hro",
-  authDomain: "my-first-project-d9a04.firebaseapp.com",
-  projectId: "my-first-project-d9a04",
-  storageBucket: "my-first-project-d9a04.firebasestorage.app",
-  messagingSenderId: "857518158920",
-  appId: "1:857518158920:web:6f6bd4d1bb37062fe1547d",
-  measurementId: "G-2BVM55BVS7"
+  apiKey: "AIzaSyDTGvL19AnOktVXHWoArmaeKWHQYVYwNDo",
+  authDomain: "hackathon-5ba12.firebaseapp.com",
+  projectId: "hackathon-5ba12",
+  storageBucket: "hackathon-5ba12.firebasestorage.app",
+  messagingSenderId: "16157655575",
+  appId: "1:16157655575:web:3451eb4ece63a99cf15252",
+  measurementId: "G-SV9D1DEZ4R"
 };
 
 const app = initializeApp(firebaseConfig);
